@@ -247,6 +247,28 @@ def _extract_traffic(item):
             if found:
                 paid = total_paid / scale
 
+        # vortex_data-style flat fields (totalVisits + paid*Traffic shares)
+        if not visits:
+            tv = _coerce_number(item.get("totalVisits"))
+            if tv:
+                visits = tv
+            else:
+                mvd = item.get("monthlyVisitsDateFormat")
+                if isinstance(mvd, dict) and mvd:
+                    try:
+                        visits = _coerce_number(mvd[sorted(mvd.keys())[-1]])
+                    except Exception:
+                        pass
+        if paid is None:
+            tot, found = 0.0, False
+            for f in ("paidReferralsTraffic", "displayAdsTraffic"):
+                n = _coerce_number(item.get(f))
+                if n is not None:
+                    tot += n
+                    found = True
+            if found:
+                paid = tot if tot <= 1 else tot / 100.0
+
     if not visits:
         visits = _deep_find(item, _VISIT_KEYS, lambda n: n >= 100)
     if paid is None:
@@ -317,7 +339,7 @@ def diagnose(domain: str) -> dict:
 
 
 def _apify_diagnose(domain: str, info: dict) -> dict:
-    info["build"] = "traffic-v4-minimal-input"
+    info["build"] = "traffic-v6-vortex"
     token = os.environ.get("APIFY_TOKEN")
     actor = os.environ.get("APIFY_ACTOR_ID", "pro100chok~similarweb-scraper")
     info["actor"] = actor
