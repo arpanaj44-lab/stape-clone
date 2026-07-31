@@ -231,6 +231,9 @@ def diagnose(domain: str) -> dict:
 
 
 def _apify_diagnose(domain: str, info: dict) -> dict:
+    # Version marker: if this string is missing from the debug output, the new
+    # code (with the required `searchType` field) is NOT deployed yet.
+    info["build"] = "traffic-v2-searchType"
     token = os.environ.get("APIFY_TOKEN")
     actor = os.environ.get("APIFY_ACTOR_ID", "pro100chok~similarweb-scraper")
     info["actor"] = actor
@@ -243,10 +246,12 @@ def _apify_diagnose(domain: str, info: dict) -> dict:
     if httpx is None:
         info["status"] = "httpx is not installed."
         return info
+    payload = _apify_payload(domain)
+    info["sent_input"] = payload  # confirm searchType/domains are actually sent
     url = f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items"
     try:
         with httpx.Client(timeout=120) as c:
-            r = c.post(url, params={"token": token}, json=_apify_payload(domain))
+            r = c.post(url, params={"token": token}, json=payload)
         info["http_status"] = r.status_code
         if r.status_code >= 300:
             info["status"] = f"Apify returned HTTP {r.status_code}."
@@ -260,7 +265,9 @@ def _apify_diagnose(domain: str, info: dict) -> dict:
         info["items_returned"] = len(items) if isinstance(items, list) else 1
         item = items[0] if isinstance(items, list) and items else (items or None)
         if not item:
-            info["status"] = "Actor ran but returned 0 items (domain may be unranked)."
+            info["status"] = ("Actor ran but returned 0 items. If 'sent_input' above lacks "
+                              "\"searchType\": \"similarweb\", the new code isn't deployed yet. "
+                              "Otherwise the domain may be unranked — try a big site like hubspot.com.")
             return info
         info["item_top_keys"] = list(item.keys())[:40] if isinstance(item, dict) else str(type(item))
         visits, paid, cpc = _extract_traffic(item)
