@@ -196,14 +196,24 @@ def _extract_traffic(item):
 
 
 def _apify_payload(domain: str) -> dict:
-    # `searchType` is REQUIRED by the default (pro100chok) actor; without it the
-    # run returns 0 items. Extra keys are ignored by actors that don't use them.
-    return {
-        "searchType": "similarweb",
-        "domains": [domain], "websites": [domain], "website": domain,
-        "queries": [domain], "startUrls": [{"url": f"https://{domain}"}],
-        "maxItems": 1, "maxResults": 1,
-    }
+    """
+    Build the actor input.
+
+    The default pro100chok/similarweb actor's schema defines ONLY `searchType`
+    and `domains` — sending extra keys (startUrls, websites, queries, maxItems…)
+    made it take a different path and return 0 results. So we send exactly that
+    minimal input. A different actor can be pointed at via APIFY_ACTOR_ID, and
+    its input shape overridden with APIFY_INPUT_JSON (a JSON template where the
+    string {domain} is substituted).
+    """
+    tpl = os.environ.get("APIFY_INPUT_JSON")
+    if tpl:
+        import json
+        try:
+            return json.loads(tpl.replace("{domain}", domain))
+        except Exception:
+            pass
+    return {"searchType": "similarweb", "domains": [domain]}
 
 
 def diagnose(domain: str) -> dict:
@@ -231,9 +241,7 @@ def diagnose(domain: str) -> dict:
 
 
 def _apify_diagnose(domain: str, info: dict) -> dict:
-    # Version marker: if this string is missing from the debug output, the new
-    # code (with the required `searchType` field) is NOT deployed yet.
-    info["build"] = "traffic-v2-searchType"
+    info["build"] = "traffic-v4-minimal-input"
     token = os.environ.get("APIFY_TOKEN")
     actor = os.environ.get("APIFY_ACTOR_ID", "pro100chok~similarweb-scraper")
     info["actor"] = actor
@@ -247,37 +255,51 @@ def _apify_diagnose(domain: str, info: dict) -> dict:
         info["status"] = "httpx is not installed."
         return info
     payload = _apify_payload(domain)
-    info["sent_input"] = payload  # confirm searchType/domains are actually sent
-    url = f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items"
+    info["sent_input"] = payload
+    base = "https://api.apify.com/v2"
     try:
-        with httpx.Client(timeout=120) as c:
-            r = c.post(url, params={"token": token}, json=payload)
-        info["http_status"] = r.status_code
-        if r.status_code >= 300:
-            info["status"] = f"Apify returned HTTP {r.status_code}."
-            info["response_snippet"] = r.text[:400]
-            if r.status_code == 401:
-                info["hint"] = "Token rejected — check APIFY_TOKEN."
-            elif r.status_code == 404:
-                info["hint"] = "Actor not found — check APIFY_ACTOR_ID (username~actor-name)."
-            return info
-        items = r.json()
-        info["items_returned"] = len(items) if isinstance(items, list) else 1
-        item = items[0] if isinstance(items, list) and items else (items or None)
-        if not item:
-            info["status"] = ("Actor ran but returned 0 items. If 'sent_input' above lacks "
-                              "\"searchType\": \"similarweb\", the new code isn't deployed yet. "
-                              "Otherwise the domain may be unranked — try a big site like hubspot.com.")
-            return info
-        info["item_top_keys"] = list(item.keys())[:40] if isinstance(item, dict) else str(type(item))
-        visits, paid, cpc = _extract_traffic(item)
-        info["parsed"] = {"visits": visits, "paid_share_raw": paid, "cpc": cpc}
-        if visits:
-            info["status"] = "OK — traffic parsed. The report should now show estimates."
-        else:
-            info["status"] = ("Connected, but couldn't locate a visits field in the response. "
-                              "Look at item_top_keys and either switch APIFY_ACTOR_ID to a "
-                              "traffic actor, or send me these keys and I'll map them.")
+        with httpx.Client(timeout=150) as c:
+            # Start the run and wait for it to finish so we can read run status.
+            run = c.post(f"{base}/acts/{actor}/runs",
+                         params={"token": token, "waitForFinish": 120}, json=payload)
+            info["http_status"] = run.status_code
+            if run.status_code >= 300:
+                info["status"] = f"Apify returned HTTP {run.status_code}."
+                info["response_snippet"] = run.text[:500]
+                if run.status_code == 401:
+                    info["hint"] = "Token rejected — check APIFY_TOKEN."
+                elif run.status_code == 404:
+                    info["hint"] = "Actor not found — check APIFY_ACTOR_ID."
+                elif run.status_code == 402:
+                    info["hint"] = "Payment required — the actor needs billing/credit on your Apify account."
+                return info
+            data = run.json().get("data", {})
+            info["run_status"] = data.get("status")             # SUCCEEDED / FAILED / RUNNING ...
+            info["run_message"] = data.get("statusMessage")     # human reason, if any
+            stats = data.get("stats") or {}
+            info["dataset_item_count"] = stats.get("datasetItemCount")
+            ds = data.get("defaultDatasetId")
+            items = []
+            if ds:
+                di = c.get(f"{base}/datasets/{ds}/items", params={"token": token, "limit": 1, "clean": "true"})
+                if di.status_code < 300 and isinstance(di.json(), list):
+                    items = di.json()
+            info["items_returned"] = len(items)
+            item = items[0] if items else None
+            if not item:
+                info["status"] = (
+                    f"Run finished as {data.get('status')} with 0 items. "
+                    "Check 'run_message' for the reason — common causes: the actor needs billing/"
+                    "credit on your Apify account (free plan without a payment method), or SimilarWeb "
+                    "returned nothing for this domain. If run_status is FAILED, that message is the fix."
+                )
+                return info
+            info["item_top_keys"] = list(item.keys())[:40] if isinstance(item, dict) else str(type(item))
+            visits, paid, cpc = _extract_traffic(item)
+            info["parsed"] = {"visits": visits, "paid_share": paid, "cpc": cpc}
+            info["status"] = ("OK — traffic parsed. The report will now show estimates."
+                              if visits else
+                              "Connected, but no visits field found — send me item_top_keys and I'll map it.")
     except Exception as e:
         info["status"] = "Request to Apify failed."
         info["error"] = str(e)
