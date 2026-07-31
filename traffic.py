@@ -149,20 +149,57 @@ _VISIT_KEYS = [
     lambda k: ("visit" in k and ("month" in k or "total" in k or "estimat" in k)),
     lambda k: k in ("visits", "traffic", "monthlyvisits", "estimatedvisits"),
 ]
-_PAID_KEYS = [lambda k: "paid" in k and ("search" in k or "share" in k or "source" in k or k == "paid")]
+_PAID_KEYS = [lambda k: "paid" in k]
 _CPC_KEYS = [lambda k: "cpc" in k]
 
 
 def _extract_traffic(item):
-    """Return (visits, paid_share_raw, cpc) best-effort from an actor item."""
-    visits = _deep_find(item, _VISIT_KEYS, lambda n: n >= 100)
-    paid = _deep_find(item, _PAID_KEYS, lambda n: 0 < n <= 100)
+    """
+    Return (monthly_visits, paid_share_fraction, cpc) from an actor item.
+
+    paid_share is normalised to a 0..1 fraction. Handles the default
+    pro100chok/similarweb schema precisely (Engagments.Visits + TrafficSources
+    percentages) and falls back to a generic key search for other actors.
+    """
+    visits = paid = cpc = None
+    if isinstance(item, dict):
+        eng = item.get("Engagments") or item.get("Engagements")
+        if isinstance(eng, dict):
+            visits = _coerce_number(eng.get("Visits") or eng.get("VisitsFormatted"))
+        if not visits:
+            emv = item.get("EstimatedMonthlyVisits")
+            if isinstance(emv, dict) and emv:
+                try:
+                    visits = _coerce_number(emv[sorted(emv.keys())[-1]])
+                except Exception:
+                    pass
+        ts = item.get("TrafficSources")
+        if isinstance(ts, dict):
+            total_paid, found = 0.0, False
+            for k, v in ts.items():
+                if "paid" in str(k).lower():
+                    n = _coerce_number(v)
+                    if n is not None:
+                        total_paid += n
+                        found = True
+            if found:
+                paid = total_paid / 100.0  # TrafficSources values are percentages
+
+    if not visits:
+        visits = _deep_find(item, _VISIT_KEYS, lambda n: n >= 100)
+    if paid is None:
+        p = _deep_find(item, _PAID_KEYS, lambda n: 0 < n <= 100)
+        if p is not None:
+            paid = p / 100 if p > 1 else p
     cpc = _deep_find(item, _CPC_KEYS, lambda n: n > 0)
     return visits, paid, cpc
 
 
 def _apify_payload(domain: str) -> dict:
+    # `searchType` is REQUIRED by the default (pro100chok) actor; without it the
+    # run returns 0 items. Extra keys are ignored by actors that don't use them.
     return {
+        "searchType": "similarweb",
         "domains": [domain], "websites": [domain], "website": domain,
         "queries": [domain], "startUrls": [{"url": f"https://{domain}"}],
         "maxItems": 1, "maxResults": 1,
@@ -260,19 +297,9 @@ def _apify(domain: str) -> dict | None:
     actor = os.environ.get("APIFY_ACTOR_ID", "pro100chok~similarweb-scraper")
 
     url = f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items"
-    # Cover the input keys different actors expect; extras are ignored by actors.
-    payload = {
-        "domains": [domain],
-        "websites": [domain],
-        "website": domain,
-        "queries": [domain],
-        "startUrls": [{"url": f"https://{domain}"}],
-        "maxItems": 1,
-        "maxResults": 1,
-    }
     try:
         with httpx.Client(timeout=120) as c:
-            r = c.post(url, params={"token": token}, json=payload)
+            r = c.post(url, params={"token": token}, json=_apify_payload(domain))
             r.raise_for_status()
             items = r.json()
     except Exception:
@@ -281,15 +308,12 @@ def _apify(domain: str) -> dict | None:
         return None
     item = items[0] if isinstance(items, list) else items
 
-    visits, paid, cpc = _extract_traffic(item)
+    visits, paid, cpc = _extract_traffic(item)  # paid is a 0..1 fraction or None
     if not visits:
         return None
     visits = int(visits)
 
-    if paid is None:
-        paid_share = _env_float("PAID_SHARE", 0.12)
-    else:
-        paid_share = paid / 100 if paid > 1 else paid
+    paid_share = paid if paid is not None else _env_float("PAID_SHARE", 0.12)
     paid_share = min(0.9, max(0.0, paid_share))
 
     avg_cpc = cpc if cpc else _env_float("AVG_CPC", 1.20)

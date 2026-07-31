@@ -13,5 +13,6 @@ COPY . .
 ENV PORT=8000
 EXPOSE 8000
 
-# Shell form so $PORT expands at runtime.
-CMD uvicorn app:app --host 0.0.0.0 --port ${PORT}
+# Shell form so $PORT expands at runtime. Proxy-header flags make request.base_url
+# reflect the real public https URL (used for shareable report links).
+CMD uvicorn app:app --host 0.0.0.0 --port ${PORT} --proxy-headers --forwarded-allow-ips="*"

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Report link expired{% endblock %}
+{% block body %}
+<div class="card" style="text-align:center;padding:44px 26px">
+  <div style="font-size:40px;margin-bottom:10px">⏳</div>
+  <h1 style="margin:0 0 8px">This report link has expired</h1>
+  <p class="muted" style="max-width:460px;margin:0 auto 20px">
+    Shared reports are available for about {{ ttl_hours }} hours after they're generated, then they're
+    removed. Run a fresh scan to get a new report and a new shareable link.
+  </p>
+  <a class="btn" href="/" style="display:inline-block">Scan a website</a>
+</div>
+{% endblock %}

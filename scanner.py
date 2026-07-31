@@ -87,6 +87,15 @@ def scan(url: str, timeout_ms: int = 30000) -> dict:
     requests: list[str] = []
     started = time.time()
 
+    try:
+        return _scan_with_browser(url, site_domain, requests, started, timeout_ms)
+    except Exception as e:
+        # Browser couldn't launch or crashed (e.g. version/executable mismatch).
+        # Fail gracefully so the web app shows a message instead of a 500.
+        return {"error": f"Browser engine error: {e}", "url": url}
+
+
+def _scan_with_browser(url, site_domain, requests, started, timeout_ms) -> dict:
     with sync_playwright() as p:
         browser = _launch(p)
         context = browser.new_context(

@@ -6,6 +6,29 @@
 {% set has_o = o is not none %}
 {% set ocolor = ('#22c55e' if o>=70 else ('#f59e0b' if o>=40 else '#ef4444')) if has_o else '#27304d' %}
 
+{% if share %}
+<div class="card" style="display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:linear-gradient(180deg,#12262f,#0f1b2a);border-color:#245">
+  <div>
+    <div style="font-weight:700">🔗 Shareable report link</div>
+    <div class="muted" style="font-size:12.5px">Anyone with this link can view this report. It expires <b>{{ share.expires_human }}</b> — about {{ share.ttl_hours }} hours after it was generated.</div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <input id="shareUrl" readonly value="{{ share.url }}"
+      style="min-width:250px;background:#0d1327;border:1px solid var(--line);color:var(--text);padding:9px 11px;border-radius:8px;font-size:12.5px">
+    <button class="btn" style="padding:9px 14px" onclick="copyShare(event)">Copy</button>
+  </div>
+</div>
+<script>
+  function copyShare(e){
+    var i=document.getElementById('shareUrl');
+    i.select(); i.setSelectionRange(0,9999);
+    if(navigator.clipboard){navigator.clipboard.writeText(i.value);}else{document.execCommand('copy');}
+    var b=e.target, t=b.textContent; b.textContent='Copied!';
+    setTimeout(function(){b.textContent=t;},1500);
+  }
+</script>
+{% endif %}
+
 <div class="card" style="display:flex;gap:26px;flex-wrap:wrap;align-items:center">
   <div style="position:relative;width:150px;height:150px;flex:0 0 auto">
     <svg width="150" height="150" viewBox="0 0 150 150">
@@ -86,9 +109,10 @@
     all values are estimates.
   </p>
   {% else %}
-  <p class="muted">Traffic-based estimates (users not tracked, ad spend impacted) are not available.
-    Configure a traffic-data provider to enable them — set <code>TRAFFIC_PROVIDER</code> and the matching
-    API key (see README). The scan-based sections above and below are unaffected.</p>
+  <p class="muted">Traffic-based estimates (users not tracked, ad spend impacted) aren't shown for this scan.
+    That's usually because no traffic-data provider is connected, or the provider has no data for this
+    domain yet — common for smaller, newer, or region-specific sites. Everything else in this report
+    (trackers, cookies, scores and recommendations) comes straight from the live scan and is unaffected.</p>
   {% endif %}
 </div>
 
