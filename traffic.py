@@ -55,11 +55,69 @@ def estimate(domain: str) -> dict | None:
         return _manual(domain)
     if provider == "mock":
         return _mock(domain)
+    if provider in ("similarweb_free", "similarweb-free", "swfree"):
+        return _similarweb_free(domain)
     if provider == "apify":
         return _apify(domain)
     if provider == "similarweb":
         return _similarweb(domain)
     return None
+
+
+# User-Agent that the Similarweb extension endpoint expects; a plain client UA
+# usually gets a 403, so we present a browser-like one.
+_SW_HEADERS = {
+    "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                   "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"),
+    "Accept": "application/json, text/plain, */*",
+    "Referer": "https://www.similarweb.com/",
+}
+
+
+def _similarweb_free(domain: str, _return_raw: bool = False):
+    """
+    FREE, no-key traffic data via Similarweb's browser-extension endpoint
+    (data.similarweb.com). Returns the same rich object the extension shows:
+    real monthly visits + traffic-source split. Reuses _extract_traffic.
+
+    Caveat: unofficial endpoint. It can rate-limit or block datacenter IPs
+    (cloud hosts), in which case it returns non-200/empty and we degrade to None.
+    """
+    if httpx is None:
+        return (None, {"error": "httpx not installed"}) if _return_raw else None
+    url = f"https://data.similarweb.com/api/v1/data?domain={domain}"
+    dbg: dict = {}
+    try:
+        with httpx.Client(timeout=30, headers=_SW_HEADERS, follow_redirects=True) as c:
+            r = c.get(url)
+        dbg["http_status"] = r.status_code
+        if r.status_code >= 300:
+            dbg["snippet"] = r.text[:300]
+            return (None, dbg) if _return_raw else None
+        item = r.json()
+    except Exception as e:
+        dbg["error"] = str(e)
+        return (None, dbg) if _return_raw else None
+
+    if isinstance(item, dict):
+        dbg["item_top_keys"] = list(item.keys())[:40]
+    visits, paid, cpc = _extract_traffic(item)
+    if not visits:
+        dbg["parsed"] = {"visits": visits, "paid_share": paid}
+        return (None, dbg) if _return_raw else None
+    visits = int(visits)
+    paid_share = paid if paid is not None else _env_float("PAID_SHARE", 0.12)
+    paid_share = min(0.9, max(0.0, paid_share))
+    avg_cpc = cpc if cpc else _env_float("AVG_CPC", 1.20)
+    result = {
+        "monthly_visits": visits,
+        "paid_share": round(paid_share, 3),
+        "monthly_ad_spend": round(visits * paid_share * avg_cpc, 2),
+        "avg_cpc": round(avg_cpc, 2),
+        "source": "Similarweb (free)",
+        "estimated": True,
+    }
+    return (result, dbg) if _return_raw else result
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +233,10 @@ def _extract_traffic(item):
                     pass
         ts = item.get("TrafficSources")
         if isinstance(ts, dict):
+            nums = [n for n in (_coerce_number(v) for v in ts.values()) if n is not None]
+            # Values may be fractions (0..1, extension API) or percentages
+            # (0..100, some actors). Detect scale from the total.
+            scale = 100.0 if sum(nums) > 1.5 else 1.0
             total_paid, found = 0.0, False
             for k, v in ts.items():
                 if "paid" in str(k).lower():
@@ -183,7 +245,7 @@ def _extract_traffic(item):
                         total_paid += n
                         found = True
             if found:
-                paid = total_paid / 100.0  # TrafficSources values are percentages
+                paid = total_paid / scale
 
     if not visits:
         visits = _deep_find(item, _VISIT_KEYS, lambda n: n >= 100)
@@ -229,6 +291,20 @@ def diagnose(domain: str) -> dict:
         return info
     if provider == "apify":
         return _apify_diagnose(domain, info)
+    if provider in ("similarweb_free", "similarweb-free", "swfree"):
+        info["build"] = "traffic-v5-swfree"
+        res, dbg = _similarweb_free(domain, _return_raw=True)
+        info.update(dbg)
+        info["result"] = res
+        if res:
+            info["status"] = "OK — traffic parsed. The report will now show estimates."
+        elif info.get("http_status") in (403, 429) or "http_status" not in info:
+            info["status"] = ("The free Similarweb endpoint blocked this request (common from cloud/"
+                              "datacenter IPs like Render). This free source often works locally but "
+                              "not from a server. See http_status/snippet above.")
+        else:
+            info["status"] = "Reached the endpoint but couldn't parse traffic — see item_top_keys."
+        return info
     # Other providers: run and report.
     try:
         r = estimate(domain)
