@@ -5,15 +5,56 @@
 advertising trackers and cookies, score the setup, and tell you how to improve it.</p>
 
 <div class="card">
-  <form id="scanForm" method="post" action="/scan" onsubmit="this.classList.add('loading');this.querySelector('button').disabled=true">
+  <form id="scanForm" method="post" action="/scan" onsubmit="return startScan()">
     <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <input type="text" name="url" placeholder="https://example.com" value="{{ prefill or '' }}" required>
-      <button class="btn" type="submit"><span class="spinner"><span class="spin"></span></span>Scan your site</button>
+      <input id="urlInput" type="text" name="url" placeholder="https://example.com" value="{{ prefill or '' }}" required>
+      <button class="btn" type="submit">Scan your site</button>
     </div>
     <p class="muted" style="margin:12px 0 0;font-size:13px">A scan takes ~10–20 seconds while the page loads and tags fire.</p>
   </form>
   {% if error %}<div class="err">{{ error }}</div>{% endif %}
 </div>
+
+<!-- Full-screen scan loader -->
+<div id="loader">
+  <div class="loader-card">
+    <div class="ring"></div>
+    <div class="loader-domain">Scanning <span id="loaderDomain"></span></div>
+    <div id="loaderMsg">Warming up the scanner…</div>
+    <div class="bar"></div>
+    <div class="loader-hint">Loading the page in a real browser and watching what fires — hang tight.</div>
+  </div>
+</div>
+
+<script>
+  function startScan(){
+    var url = (document.getElementById('urlInput').value || '').trim();
+    document.getElementById('loaderDomain').textContent = url.replace(/^https?:\/\//,'');
+    document.getElementById('loader').classList.add('show');
+
+    // Narrate the scan so the wait feels like something is happening.
+    var msgs = [
+      "🚀 Launching a real browser to visit your site…",
+      "🔎 Watching every network request as the page loads…",
+      "🕵️ Hunting for tracking tags — Google, Meta, LinkedIn, TikTok & more…",
+      "🍪 Inspecting cookies and how long they actually live…",
+      "🛡️ Checking which tags survive ad blockers and Safari ITP…",
+      "⚡ Measuring page speed and tracking overhead…",
+      "📊 Scoring analytics, ads, cookies and speed…",
+      "💡 Building your personalized recommendations…",
+      "💸 Estimating tracking loss and wasted ad spend…",
+      "✨ Almost there — polishing your report…"
+    ];
+    var i = 0, el = document.getElementById('loaderMsg');
+    el.textContent = msgs[0];
+    window._loaderTimer = setInterval(function(){
+      i = (i + 1) % msgs.length;
+      el.style.opacity = 0;
+      setTimeout(function(){ el.textContent = msgs[i]; el.style.opacity = 1; }, 250);
+    }, 2300);
+    return true; // let the POST proceed; overlay stays until the report page loads
+  }
+</script>
 
 <div class="card">
   <h2>What we check</h2>

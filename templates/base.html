@@ -47,6 +47,24 @@
   @keyframes spin{to{transform:rotate(360deg)}}
   .spin{width:16px;height:16px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;
     border-radius:50%;display:inline-block;animation:spin .8s linear infinite;vertical-align:-3px;margin-right:8px}
+
+  /* Full-screen scan loader */
+  #loader{position:fixed;inset:0;z-index:50;display:none;place-items:center;
+    background:rgba(8,12,24,.82);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  #loader.show{display:grid;animation:fade .3s ease}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  .loader-card{text-align:center;max-width:440px;padding:34px 30px}
+  .ring{width:74px;height:74px;margin:0 auto 22px;border-radius:50%;
+    border:5px solid rgba(255,255,255,.12);border-top-color:var(--brand);
+    animation:spin 1s linear infinite}
+  .loader-domain{font-weight:700;font-size:17px;margin-bottom:4px;word-break:break-all}
+  #loaderMsg{color:var(--muted);font-size:14.5px;min-height:22px;transition:opacity .25s ease}
+  .bar{margin:22px auto 0;height:6px;width:260px;max-width:80%;border-radius:999px;
+    background:#1b2440;overflow:hidden;position:relative}
+  .bar::before{content:"";position:absolute;top:0;bottom:0;width:40%;border-radius:999px;
+    background:linear-gradient(90deg,var(--brand),var(--brand2));animation:slide 1.4s ease-in-out infinite}
+  @keyframes slide{0%{left:-40%}100%{left:100%}}
+  .loader-hint{color:var(--muted);font-size:12px;margin-top:16px}
 </style>
 </head>
 <body>
