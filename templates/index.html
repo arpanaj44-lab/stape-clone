@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Free website tracking checker</h1>
+<p class="muted">Enter any public URL. We load the page in a real browser, detect analytics &amp;
+advertising trackers and cookies, score the setup, and tell you how to improve it.</p>
+
+<div class="card">
+  <form id="scanForm" method="post" action="/scan" onsubmit="this.classList.add('loading');this.querySelector('button').disabled=true">
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <input type="text" name="url" placeholder="https://example.com" value="{{ prefill or '' }}" required>
+      <button class="btn" type="submit"><span class="spinner"><span class="spin"></span></span>Scan your site</button>
+    </div>
+    <p class="muted" style="margin:12px 0 0;font-size:13px">A scan takes ~10–20 seconds while the page loads and tags fire.</p>
+  </form>
+  {% if error %}<div class="err">{{ error }}</div>{% endif %}
+</div>
+
+<div class="card">
+  <h2>What we check</h2>
+  <table>
+    <tr><td><b>Analytics</b></td><td class="muted">GA4 and product-analytics tags, and whether they run client- or server-side.</td></tr>
+    <tr><td><b>Advertising</b></td><td class="muted">Ad pixels (Google Ads, Meta, LinkedIn, Reddit, TikTok…) and server-side / Conversions-API readiness.</td></tr>
+    <tr><td><b>Cookies</b></td><td class="muted">Main tracking cookies and their real lifetime — flagging ITP-capped short cookies.</td></tr>
+    <tr><td><b>Page speed</b></td><td class="muted">Load time and how many third-party tracking requests weigh the page down.</td></tr>
+  </table>
+</div>
+{% endblock %}

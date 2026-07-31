@@ -76,7 +76,44 @@ the service's **Variables** tab.
 | *(unset)* / `none` | — | Estimates section shows a "connect a provider" note |
 | `mock` | — | Deterministic demo numbers (clearly labelled) — good for a quick look |
 | `manual` | `MONTHLY_VISITS` (+ optional `MONTHLY_AD_SPEND`, `PAID_SHARE`) | Uses your own numbers |
+| `apify` | `APIFY_TOKEN` (+ optional `APIFY_ACTOR_ID`) | Runs an Apify traffic actor; visits + paid share + CPC |
 | `similarweb` | `SIMILARWEB_API_KEY` | Live monthly visits + paid share from Similarweb |
 
 `AVG_CPC` (default `1.20`) is used to derive ad spend from paid visits when the
 provider doesn't return spend directly.
+
+### Getting an Apify token (free tier)
+
+1. Sign up at <https://console.apify.com/sign-up> (free plan includes monthly usage credits).
+2. In the Apify Console, open **Settings → Integrations** (or **API & Integrations**).
+3. Copy your **Personal API token** (starts with `apify_api_...`).
+4. Set env vars on your host (Render → your service → **Environment**):
+   - `TRAFFIC_PROVIDER` = `apify`
+   - `APIFY_TOKEN` = *your token*
+   - *(optional)* `APIFY_ACTOR_ID` = e.g. `pro100chok~similarweb-scraper` (the default) or another traffic actor in `username~actor-name` form.
+5. Save → the service redeploys → the "Tracking loss impact" box fills in.
+
+> These actors are pay-per-use (~$0.70–$1 per 1,000 domains); the free monthly
+> credit covers hundreds of scans. The adapter parses the actor's output
+> defensively, so if a particular actor's numbers don't populate, switch
+> `APIFY_ACTOR_ID` to another traffic actor — no code change needed.
+
+---
+
+## Troubleshooting
+
+**`failed to read dockerfile: open Dockerfile: no such file or directory`**
+Render can't find the `Dockerfile` at the repo root. Almost always the files got
+uploaded **inside a subfolder** (e.g. `stape-clone/tracking-checker/Dockerfile`).
+Fix either way:
+
+- **Easiest:** make the repo root contain the files directly — `Dockerfile`,
+  `app.py`, `render.yaml`, `requirements.txt` and the `templates/` folder should
+  appear on the repo's main page, *not* inside another folder. Re-upload so
+  nothing is nested. Then in Render click **Manual Deploy → Clear build cache & deploy**.
+- **Or keep the subfolder:** in Render → service → **Settings**, set
+  **Root Directory** to the subfolder (e.g. `tracking-checker`) and redeploy.
+
+To check your repo layout: open the repo on GitHub — you should see `Dockerfile`
+in the file list on the landing page. If instead you see a single folder, click
+into it; that's the nesting to remove.

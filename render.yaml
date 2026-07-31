@@ -1,0 +1,19 @@
+# Render Blueprint — one-click-ish deploy.
+# In Render: New + -> Blueprint -> connect the repo containing this file.
+services:
+  - type: web
+    name: tracking-checker
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # Traffic-data provider for the ad-spend / users-not-tracked section.
+      # Leave as-is to run without it; switch to "similarweb" + add the key to enable.
+      - key: TRAFFIC_PROVIDER
+        value: none
+      # - key: SIMILARWEB_API_KEY
+      #   sync: false            # set the secret in the Render dashboard
+      - key: AVG_CPC
+        value: "1.20"

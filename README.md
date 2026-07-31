@@ -77,6 +77,7 @@ traffic-intelligence provider. Configure one with env vars:
 | *(unset)* / `none` | — | Impact section shows a "connect a provider" note |
 | `mock` | — | Deterministic demo numbers, clearly labelled (quick look) |
 | `manual` | `MONTHLY_VISITS` (+ optional `MONTHLY_AD_SPEND`, `PAID_SHARE`) | Your own numbers |
+| `apify` | `APIFY_TOKEN` (+ optional `APIFY_ACTOR_ID`) | Runs an Apify traffic actor (free tier available); see DEPLOY.md |
 | `similarweb` | `SIMILARWEB_API_KEY` | Live monthly visits + paid share from Similarweb |
 
 `AVG_CPC` (default `1.20`) derives ad spend from paid visits when the provider doesn't

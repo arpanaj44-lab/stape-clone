@@ -7,8 +7,9 @@ come from scanning the page — they come from a third-party traffic-data provid
 
 Select a provider with the TRAFFIC_PROVIDER env var:
 
-    similarweb   -> official Similarweb API   (needs SIMILARWEB_API_KEY)
-    manual       -> fixed numbers from env    (MONTHLY_VISITS, MONTHLY_AD_SPEND, PAID_SHARE)
+    apify        -> an Apify traffic actor      (needs APIFY_TOKEN; APIFY_ACTOR_ID optional)
+    similarweb   -> official Similarweb API      (needs SIMILARWEB_API_KEY)
+    manual       -> fixed numbers from env       (MONTHLY_VISITS, MONTHLY_AD_SPEND, PAID_SHARE)
     mock         -> deterministic demo numbers derived from the domain (clearly labelled)
     none/unset   -> no data; the ad-spend section shows a "connect an API" note
 
@@ -54,6 +55,8 @@ def estimate(domain: str) -> dict | None:
         return _manual(domain)
     if provider == "mock":
         return _mock(domain)
+    if provider == "apify":
+        return _apify(domain)
     if provider == "similarweb":
         return _similarweb(domain)
     return None
@@ -92,6 +95,130 @@ def _mock(domain: str) -> dict:
         "monthly_ad_spend": spend,
         "avg_cpc": avg_cpc,
         "source": "Demo estimate (mock provider)",
+        "estimated": True,
+    }
+
+
+def _coerce_number(v) -> float | None:
+    """Turn values like 1234, '1,234', '1.2M', '500K', '3.4B' into a float."""
+    if isinstance(v, (int, float)):
+        return float(v)
+    if not isinstance(v, str):
+        return None
+    s = v.strip().replace(",", "").replace("$", "")
+    if not s:
+        return None
+    mult = 1.0
+    if s[-1:].upper() in ("K", "M", "B"):
+        mult = {"K": 1e3, "M": 1e6, "B": 1e9}[s[-1].upper()]
+        s = s[:-1]
+    try:
+        return float(s) * mult
+    except ValueError:
+        return None
+
+
+def _deep_find(obj, key_matches, value_test):
+    """
+    Recursively search a nested dict/list for the first value whose *key* matches
+    any predicate in key_matches and whose coerced value passes value_test.
+    Returns the coerced float, or None. Makes us resilient to differing actor
+    output schemas (monthlyVisits vs total_visits vs visits, etc.).
+    """
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            kl = str(k).lower()
+            if any(m(kl) for m in key_matches):
+                num = _coerce_number(v)
+                if num is not None and value_test(num):
+                    return num
+        for v in obj.values():
+            found = _deep_find(v, key_matches, value_test)
+            if found is not None:
+                return found
+    elif isinstance(obj, list):
+        for v in obj:
+            found = _deep_find(v, key_matches, value_test)
+            if found is not None:
+                return found
+    return None
+
+
+def _apify(domain: str) -> dict | None:
+    """
+    Run an Apify traffic actor and extract monthly visits, paid share and CPC.
+
+    Config:
+        APIFY_TOKEN     (required) — your Apify API token.
+        APIFY_ACTOR_ID  (optional) — actor to run, in 'username~actor-name' form.
+                        Defaults to a Similarweb-style traffic actor.
+        AVG_CPC         (optional) — fallback CPC if the actor returns none.
+
+    We send a permissive input covering the common field names actors use, then
+    parse the returned dataset item defensively. Returns None on any failure so
+    the report degrades to the 'connect a provider' note rather than wrong data.
+    """
+    token = os.environ.get("APIFY_TOKEN")
+    if not token or httpx is None:
+        return None
+    actor = os.environ.get("APIFY_ACTOR_ID", "pro100chok~similarweb-scraper")
+
+    url = f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items"
+    # Cover the input keys different actors expect; extras are ignored by actors.
+    payload = {
+        "domains": [domain],
+        "websites": [domain],
+        "website": domain,
+        "queries": [domain],
+        "startUrls": [{"url": f"https://{domain}"}],
+        "maxItems": 1,
+        "maxResults": 1,
+    }
+    try:
+        with httpx.Client(timeout=120) as c:
+            r = c.post(url, params={"token": token}, json=payload)
+            r.raise_for_status()
+            items = r.json()
+    except Exception:
+        return None
+    if not items:
+        return None
+    item = items[0] if isinstance(items, list) else items
+
+    # Monthly visits: prefer keys mentioning both visit and month/total, else any 'visit'.
+    visits = _deep_find(
+        item,
+        [lambda k: ("visit" in k and ("month" in k or "total" in k or "estimat" in k)),
+         lambda k: k in ("visits", "traffic", "monthlyvisits", "estimatedvisits")],
+        lambda n: n >= 100,  # ignore tiny/percentage-like values
+    )
+    if not visits:
+        return None
+    visits = int(visits)
+
+    # Paid share: a key mentioning 'paid' with a 0..1 (or 0..100) value.
+    paid = _deep_find(
+        item,
+        [lambda k: "paid" in k and ("search" in k or "share" in k or "source" in k or k == "paid")],
+        lambda n: 0 < n <= 100,
+    )
+    if paid is None:
+        paid_share = _env_float("PAID_SHARE", 0.12)
+    else:
+        paid_share = paid / 100 if paid > 1 else paid
+    paid_share = min(0.9, max(0.0, paid_share))
+
+    # CPC: a key mentioning 'cpc'.
+    cpc = _deep_find(item, [lambda k: "cpc" in k], lambda n: n > 0)
+    avg_cpc = cpc if cpc else _env_float("AVG_CPC", 1.20)
+
+    spend = round(visits * paid_share * avg_cpc, 2)
+    return {
+        "monthly_visits": visits,
+        "paid_share": round(paid_share, 3),
+        "monthly_ad_spend": spend,
+        "avg_cpc": round(avg_cpc, 2),
+        "source": f"Apify ({actor.split('~')[0]})",
         "estimated": True,
     }
 

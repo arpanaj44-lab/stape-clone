@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tracking report · hubspot.com</title>
+<style>
+  :root{
+    --bg:#0b1020; --panel:#141a2e; --panel2:#1b2440; --line:#27304d;
+    --text:#e7ecf7; --muted:#9aa6c4; --brand:#5b8cff; --brand2:#7c5cff;
+    --good:#22c55e; --warn:#f59e0b; --bad:#ef4444; --chip:#232c49;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 70% -10%,#182448 0,var(--bg) 55%);
+    color:var(--text);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    min-height:100vh}
+  a{color:var(--brand);text-decoration:none}
+  .wrap{max-width:960px;margin:0 auto;padding:32px 20px 80px}
+  .top{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .logo{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--brand),var(--brand2));
+    display:grid;place-items:center;font-weight:800;color:#fff}
+  .brandname{font-weight:700;letter-spacing:.2px}
+  .tag{font-size:12px;color:var(--muted);border:1px solid var(--line);padding:2px 8px;border-radius:999px}
+  .card{background:linear-gradient(180deg,var(--panel),#10162a);border:1px solid var(--line);
+    border-radius:16px;padding:22px;margin:18px 0;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  h1{font-size:30px;margin:18px 0 6px}
+  h2{font-size:19px;margin:0 0 14px}
+  .muted{color:var(--muted)}
+  .btn{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border:0;
+    padding:12px 20px;border-radius:10px;font-weight:600;cursor:pointer;font-size:15px}
+  .btn:disabled{opacity:.6;cursor:progress}
+  input[type=url],input[type=text]{flex:1;min-width:0;background:#0d1327;border:1px solid var(--line);
+    color:var(--text);padding:13px 14px;border-radius:10px;font-size:15px}
+  .err{background:#2a1620;border:1px solid #5a2333;color:#ffb4c0;padding:12px 14px;border-radius:10px;margin-top:14px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.4px}
+  tr:last-child td{border-bottom:0}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600}
+  .pill.good{background:rgba(34,197,94,.15);color:#7ee29a}
+  .pill.warn{background:rgba(245,158,11,.15);color:#f7c66b}
+  .pill.bad{background:rgba(239,68,68,.15);color:#ff9aa5}
+  .pill.muted{background:var(--chip);color:var(--muted)}
+  .footer{margin-top:40px;color:var(--muted);font-size:12.5px;text-align:center}
+  .spinner{display:none}
+  form.loading .spinner{display:inline-block}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .spin{width:16px;height:16px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;
+    border-radius:50%;display:inline-block;animation:spin .8s linear infinite;vertical-align:-3px;margin-right:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="logo">T</div>
+    <div class="brandname">Tracking Checker</div>
+    <span class="tag">MVP</span>
+  </div>
+  
+
+
+
+
+
+<div class="card" style="display:flex;gap:26px;flex-wrap:wrap;align-items:center">
+  <div style="position:relative;width:150px;height:150px;flex:0 0 auto">
+    <svg width="150" height="150" viewBox="0 0 150 150">
+      <circle cx="75" cy="75" r="62" fill="none" stroke="#27304d" stroke-width="14"/>
+      
+      <circle cx="75" cy="75" r="62" fill="none" stroke="#f59e0b" stroke-width="14"
+        stroke-linecap="round" stroke-dasharray="190.9 389.5"
+        transform="rotate(-90 75 75)"/>
+      
+    </svg>
+    <div style="position:absolute;inset:0;display:grid;place-items:center;text-align:center">
+      <div>
+        <div style="font-size:38px;font-weight:800;line-height:1">49</div>
+        <div class="muted" style="font-size:12px">/ 100</div>
+      </div>
+    </div>
+  </div>
+  <div style="flex:1;min-width:240px">
+    <div class="muted" style="font-size:13px">Scanned 2026-07-31 08:07 UTC</div>
+    <h1 style="margin:4px 0 2px">hubspot.com</h1>
+    <div style="margin:6px 0 14px">
+      <span class="pill warn">Needs work</span>
+      <span class="muted" style="font-size:13px;margin-left:8px">https://www.hubspot.com/</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+      
+      <div style="background:#0d1327;border:1px solid var(--line);border-radius:12px;padding:12px">
+        <div class="muted" style="font-size:11.5px;text-transform:uppercase;letter-spacing:.4px">Analytics</div>
+        <div style="font-size:24px;font-weight:700;color:#ef4444">
+          35
+        </div>
+      </div>
+      
+      <div style="background:#0d1327;border:1px solid var(--line);border-radius:12px;padding:12px">
+        <div class="muted" style="font-size:11.5px;text-transform:uppercase;letter-spacing:.4px">Ads</div>
+        <div style="font-size:24px;font-weight:700;color:#f59e0b">
+          48
+        </div>
+      </div>
+      
+      <div style="background:#0d1327;border:1px solid var(--line);border-radius:12px;padding:12px">
+        <div class="muted" style="font-size:11.5px;text-transform:uppercase;letter-spacing:.4px">Cookie lifetime</div>
+        <div style="font-size:24px;font-weight:700;color:#22c55e">
+          79
+        </div>
+      </div>
+      
+      <div style="background:#0d1327;border:1px solid var(--line);border-radius:12px;padding:12px">
+        <div class="muted" style="font-size:11.5px;text-transform:uppercase;letter-spacing:.4px">Page speed</div>
+        <div style="font-size:24px;font-weight:700;color:#ef4444">
+          32
+        </div>
+      </div>
+      
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>🕵️ Trackers detected</h2>
+  
+  <table>
+    <tr><th>Platform</th><th>Category</th><th>Tracking method</th><th>Status</th></tr>
+    
+    <tr>
+      <td><b>Google Analytics 4</b></td>
+      <td class="muted">Analytics</td>
+      <td>Client-side</td>
+      <td>
+        <span class="pill warn">Improve</span>
+        
+      </td>
+    </tr>
+    
+    <tr>
+      <td><b>Google Ads</b></td>
+      <td class="muted">Advertising</td>
+      <td>Client-side</td>
+      <td>
+        <span class="pill warn">Improve</span>
+        
+      </td>
+    </tr>
+    
+    <tr>
+      <td><b>HubSpot</b></td>
+      <td class="muted">Advertising</td>
+      <td>Server-side</td>
+      <td>
+        <span class="pill good">Good</span>
+        
+      </td>
+    </tr>
+    
+    <tr>
+      <td><b>LinkedIn</b></td>
+      <td class="muted">Advertising</td>
+      <td>Client-side</td>
+      <td>
+        <span class="pill warn">Improve</span>
+        
+      </td>
+    </tr>
+    
+    <tr>
+      <td><b>Microsoft Ads (UET)</b></td>
+      <td class="muted">Advertising</td>
+      <td>Client-side</td>
+      <td>
+        <span class="pill warn">Improve</span>
+        
+      </td>
+    </tr>
+    
+    <tr>
+      <td><b>X (Twitter)</b></td>
+      <td class="muted">Advertising</td>
+      <td>Client-side</td>
+      <td>
+        <span class="pill warn">Improve</span>
+        
+      </td>
+    </tr>
+    
+    <tr>
+      <td><b>Google Tag Manager</b></td>
+      <td class="muted">Tag manager</td>
+      <td>Client-side</td>
+      <td>
+        <span class="pill warn">Improve</span>
+        
+      </td>
+    </tr>
+    
+  </table>
+  
+</div>
+
+<div class="card">
+  <h2>💸 Tracking loss impact</h2>
+  
+  
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div style="background:#0d1327;border:1px solid var(--line);border-radius:12px;padding:16px">
+      <div class="muted" style="font-size:12px;text-transform:uppercase;letter-spacing:.4px">Users not tracked (est.)</div>
+      <div style="font-size:28px;font-weight:800;color:#f7c66b">~10,220<span class="muted" style="font-size:14px;font-weight:500"> / month</span></div>
+      <div class="muted" style="font-size:12.5px;margin-top:4px">≈ 13.0% of ~78,612 monthly visits</div>
+    </div>
+    <div style="background:#0d1327;border:1px solid var(--line);border-radius:12px;padding:16px">
+      <div class="muted" style="font-size:12px;text-transform:uppercase;letter-spacing:.4px">Ad spend impacted (est.)</div>
+      <div style="font-size:28px;font-weight:800;color:#ff9aa5">~$3,396<span class="muted" style="font-size:14px;font-weight:500"> / month</span></div>
+      <div class="muted" style="font-size:12.5px;margin-top:4px">≈ 18.0% of ~$18,867 est. monthly ad spend</div>
+    </div>
+  </div>
+  <p class="muted" style="font-size:12.5px;margin:12px 0 0">
+    Due to ITP and ad blockers, some visits and campaign results aren't attributed in your analytics or ads.
+    Moving supported platforms server-side recovers much of this. Traffic figures via <b>Demo estimate (mock provider)</b>;
+    all values are estimates.
+  </p>
+  
+</div>
+
+<div class="card">
+  <h2>🍪 Main tracking cookies detected</h2>
+  
+  <table>
+    <tr><th>Cookie name</th><th>Provider</th><th>Category</th><th>Lifetime</th></tr>
+    
+    <tr>
+      <td><code>_ga</code></td>
+      <td class="muted">Google</td>
+      <td class="muted">Analytics</td>
+      <td>
+        <span class="pill good">400 days</span>
+      </td>
+    </tr>
+    
+    <tr>
+      <td><code>_ga_{id}</code></td>
+      <td class="muted">Google</td>
+      <td class="muted">Analytics</td>
+      <td>
+        <span class="pill good">400 days</span>
+      </td>
+    </tr>
+    
+    <tr>
+      <td><code>_gcl_au</code></td>
+      <td class="muted">Google</td>
+      <td class="muted">Advertising</td>
+      <td>
+        <span class="pill good">90 days</span>
+      </td>
+    </tr>
+    
+    <tr>
+      <td><code>_uetsid</code></td>
+      <td class="muted">Microsoft</td>
+      <td class="muted">Advertising</td>
+      <td>
+        <span class="pill bad">1 days</span>
+        
+      </td>
+    </tr>
+    
+    <tr>
+      <td><code>_uetvid</code></td>
+      <td class="muted">Microsoft</td>
+      <td class="muted">Advertising</td>
+      <td>
+        <span class="pill good">390 days</span>
+      </td>
+    </tr>
+    
+  </table>
+  <p class="muted" style="font-size:12.5px;margin:12px 0 0">Cookies capped near 7 days are typically shortened by Safari ITP because they're set client-side.</p>
+  
+</div>
+
+<div class="card">
+  <h2>🎯 Recommended actions</h2>
+  <p class="muted" style="margin-top:-4px">Your website&#39;s tracking setup scored 49, which leaves clear room for improvement. Key platforms like Google Analytics 4, Google Ads, LinkedIn are currently tracked client-side, which makes them vulnerable to ad blockers, browser restrictions and data loss. Several tracking cookies are being shortened to about 7 days by browser tracking prevention, which weakens returning-visitor attribution. Moving supported platforms to server-side tracking and extending cookie lifetimes will improve data accuracy, attribution and resilience. The prioritised actions below show where to start and how much each is worth.</p>
+  <div style="display:flex;flex-direction:column;gap:12px;margin-top:16px">
+    
+    <div style="background:#0d1327;border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;gap:16px;align-items:flex-start">
+      <div style="flex:1">
+        <div style="font-weight:700;margin-bottom:4px">Bypass ITP limits and extend cookie duration</div>
+        <div style="margin-bottom:8px">
+          <span class="pill muted" style="margin-right:6px">Cookies</span>
+        </div>
+        <div class="muted" style="font-size:13.5px">1 of your tracking cookies (_uetsid) are set client-side and are being capped to roughly 7 days by Safari&#39;s Intelligent Tracking Prevention. Set these cookies server-side (HttpOnly, first-party) so they persist their full intended lifetime, improving returning-visitor attribution and audience match rates.</div>
+      </div>
+      <div style="flex:0 0 auto;text-align:center;background:rgba(91,140,255,.12);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:78px">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px">Score +</div>
+        <div style="font-size:22px;font-weight:800;color:var(--brand)">19</div>
+      </div>
+    </div>
+    
+    <div style="background:#0d1327;border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;gap:16px;align-items:flex-start">
+      <div style="flex:1">
+        <div style="font-weight:700;margin-bottom:4px">Implement Google Analytics 4 server-side tracking</div>
+        <div style="margin-bottom:8px">
+          <span class="pill muted" style="margin-right:6px">Analytics</span>
+        </div>
+        <div class="muted" style="font-size:13.5px">GA4 is currently loaded entirely client-side, so events are lost to ad blockers, browser restrictions and network failures. Route GA4 through a server-side GTM container to recover lost events, improve data accuracy and gain control over the data sent to Google.</div>
+      </div>
+      <div style="flex:0 0 auto;text-align:center;background:rgba(91,140,255,.12);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:78px">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px">Score +</div>
+        <div style="font-size:22px;font-weight:800;color:var(--brand)">16</div>
+      </div>
+    </div>
+    
+    <div style="background:#0d1327;border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;gap:16px;align-items:flex-start">
+      <div style="flex:1">
+        <div style="font-weight:700;margin-bottom:4px">Avoid negative impact of ad blockers</div>
+        <div style="margin-bottom:8px">
+          <span class="pill muted" style="margin-right:6px">Advertising</span><span class="pill muted" style="margin-right:6px">Analytics</span>
+        </div>
+        <div class="muted" style="font-size:13.5px">A large share of visitors block third-party tracking scripts, so client-side tags silently under-report. Loading tags from your own domain via server-side tracking makes them first-party and far harder to block, recovering conversions you currently never see.</div>
+      </div>
+      <div style="flex:0 0 auto;text-align:center;background:rgba(91,140,255,.12);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:78px">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px">Score +</div>
+        <div style="font-size:22px;font-weight:800;color:var(--brand)">12</div>
+      </div>
+    </div>
+    
+    <div style="background:#0d1327;border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;gap:16px;align-items:flex-start">
+      <div style="flex:1">
+        <div style="font-weight:700;margin-bottom:4px">Optimise page speed</div>
+        <div style="margin-bottom:8px">
+          <span class="pill muted" style="margin-right:6px">Pagespeed</span>
+        </div>
+        <div class="muted" style="font-size:13.5px">The page took about 6.9s to load and fires roughly 30 third-party tracking requests. Consolidating tags into a single server-side container and deferring non-critical scripts cuts main-thread work and speeds up the page.</div>
+      </div>
+      <div style="flex:0 0 auto;text-align:center;background:rgba(91,140,255,.12);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:78px">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px">Score +</div>
+        <div style="font-size:22px;font-weight:800;color:var(--brand)">7</div>
+      </div>
+    </div>
+    
+    <div style="background:#0d1327;border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;gap:16px;align-items:flex-start">
+      <div style="flex:1">
+        <div style="font-weight:700;margin-bottom:4px">Move Google Ads to server-side tracking</div>
+        <div style="margin-bottom:8px">
+          <span class="pill muted" style="margin-right:6px">Advertising</span>
+        </div>
+        <div class="muted" style="font-size:13.5px">Send Google Ads conversions via the server-side container / enhanced conversions so attribution survives ad blockers and ITP.</div>
+      </div>
+      <div style="flex:0 0 auto;text-align:center;background:rgba(91,140,255,.12);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:78px">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px">Score +</div>
+        <div style="font-size:22px;font-weight:800;color:var(--brand)">6</div>
+      </div>
+    </div>
+    
+    <div style="background:#0d1327;border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;gap:16px;align-items:flex-start">
+      <div style="flex:1">
+        <div style="font-weight:700;margin-bottom:4px">Adopt web and server-side tracking together for LinkedIn</div>
+        <div style="margin-bottom:8px">
+          <span class="pill muted" style="margin-right:6px">Advertising</span>
+        </div>
+        <div class="muted" style="font-size:13.5px">Add the LinkedIn Conversions API next to the Insight Tag to improve match quality and capture conversions lost client-side.</div>
+      </div>
+      <div style="flex:0 0 auto;text-align:center;background:rgba(91,140,255,.12);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:78px">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px">Score +</div>
+        <div style="font-size:22px;font-weight:800;color:var(--brand)">6</div>
+      </div>
+    </div>
+    
+    <div style="background:#0d1327;border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;gap:16px;align-items:flex-start">
+      <div style="flex:1">
+        <div style="font-weight:700;margin-bottom:4px">Move Microsoft Ads (UET) to server-side</div>
+        <div style="margin-bottom:8px">
+          <span class="pill muted" style="margin-right:6px">Advertising</span>
+        </div>
+        <div class="muted" style="font-size:13.5px">Send UET conversions server-side to reduce loss from tracking prevention.</div>
+      </div>
+      <div style="flex:0 0 auto;text-align:center;background:rgba(91,140,255,.12);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:78px">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px">Score +</div>
+        <div style="font-size:22px;font-weight:800;color:var(--brand)">5</div>
+      </div>
+    </div>
+    
+    <div style="background:#0d1327;border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;gap:16px;align-items:flex-start">
+      <div style="flex:1">
+        <div style="font-weight:700;margin-bottom:4px">Adopt X (Twitter) server-side conversions</div>
+        <div style="margin-bottom:8px">
+          <span class="pill muted" style="margin-right:6px">Advertising</span>
+        </div>
+        <div class="muted" style="font-size:13.5px">Complement the website tag with server-side conversions for more complete attribution.</div>
+      </div>
+      <div style="flex:0 0 auto;text-align:center;background:rgba(91,140,255,.12);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:78px">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px">Score +</div>
+        <div style="font-size:22px;font-weight:800;color:var(--brand)">5</div>
+      </div>
+    </div>
+    
+    <div style="background:#0d1327;border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;gap:16px;align-items:flex-start">
+      <div style="flex:1">
+        <div style="font-weight:700;margin-bottom:4px">Review tools without a server-side path</div>
+        <div style="margin-bottom:8px">
+          <span class="pill muted" style="margin-right:6px">Analytics</span><span class="pill muted" style="margin-right:6px">Advertising</span>
+        </div>
+        <div class="muted" style="font-size:13.5px">HubSpot do not offer a server-side / Conversions-API option. Keep them behind a consent gate and load them only when needed so they don&#39;t drag down page performance or compliance.</div>
+      </div>
+      <div style="flex:0 0 auto;text-align:center;background:rgba(91,140,255,.12);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:78px">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px">Score +</div>
+        <div style="font-size:22px;font-weight:800;color:var(--brand)">3</div>
+      </div>
+    </div>
+    
+  </div>
+</div>
+
+<div style="text-align:center;margin-top:6px">
+  <a class="btn" href="/" style="display:inline-block">Scan another site</a>
+</div>
+
+  <div class="footer">
+    Rule-based tracking audit · scans public pages only · not affiliated with Stape.
+  </div>
+</div>
+</body>
+</html>

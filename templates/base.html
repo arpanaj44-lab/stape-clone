@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Website Tracking Checker{% endblock %}</title>
+<style>
+  :root{
+    --bg:#0b1020; --panel:#141a2e; --panel2:#1b2440; --line:#27304d;
+    --text:#e7ecf7; --muted:#9aa6c4; --brand:#5b8cff; --brand2:#7c5cff;
+    --good:#22c55e; --warn:#f59e0b; --bad:#ef4444; --chip:#232c49;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 70% -10%,#182448 0,var(--bg) 55%);
+    color:var(--text);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    min-height:100vh}
+  a{color:var(--brand);text-decoration:none}
+  .wrap{max-width:960px;margin:0 auto;padding:32px 20px 80px}
+  .top{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .logo{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--brand),var(--brand2));
+    display:grid;place-items:center;font-weight:800;color:#fff}
+  .brandname{font-weight:700;letter-spacing:.2px}
+  .tag{font-size:12px;color:var(--muted);border:1px solid var(--line);padding:2px 8px;border-radius:999px}
+  .card{background:linear-gradient(180deg,var(--panel),#10162a);border:1px solid var(--line);
+    border-radius:16px;padding:22px;margin:18px 0;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  h1{font-size:30px;margin:18px 0 6px}
+  h2{font-size:19px;margin:0 0 14px}
+  .muted{color:var(--muted)}
+  .btn{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border:0;
+    padding:12px 20px;border-radius:10px;font-weight:600;cursor:pointer;font-size:15px}
+  .btn:disabled{opacity:.6;cursor:progress}
+  input[type=url],input[type=text]{flex:1;min-width:0;background:#0d1327;border:1px solid var(--line);
+    color:var(--text);padding:13px 14px;border-radius:10px;font-size:15px}
+  .err{background:#2a1620;border:1px solid #5a2333;color:#ffb4c0;padding:12px 14px;border-radius:10px;margin-top:14px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.4px}
+  tr:last-child td{border-bottom:0}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600}
+  .pill.good{background:rgba(34,197,94,.15);color:#7ee29a}
+  .pill.warn{background:rgba(245,158,11,.15);color:#f7c66b}
+  .pill.bad{background:rgba(239,68,68,.15);color:#ff9aa5}
+  .pill.muted{background:var(--chip);color:var(--muted)}
+  .footer{margin-top:40px;color:var(--muted);font-size:12.5px;text-align:center}
+  .spinner{display:none}
+  form.loading .spinner{display:inline-block}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .spin{width:16px;height:16px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;
+    border-radius:50%;display:inline-block;animation:spin .8s linear infinite;vertical-align:-3px;margin-right:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="logo">T</div>
+    <div class="brandname">Tracking Checker</div>
+    <span class="tag">MVP</span>
+  </div>
+  {% block body %}{% endblock %}
+  <div class="footer">
+    Rule-based tracking audit · scans public pages only · not affiliated with Stape.
+  </div>
+</div>
+</body>
+</html>
