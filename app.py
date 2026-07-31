@@ -62,6 +62,15 @@ async def api_scan(url: str):
     return JSONResponse(await _run_scan(url))
 
 
+@app.get("/api/traffic-debug")
+async def traffic_debug(domain: str = "hubspot.com"):
+    """Check whether the configured traffic provider (Apify etc.) is working.
+    Visit /api/traffic-debug?domain=yoursite.com — secrets are never returned."""
+    import traffic
+    result = await asyncio.to_thread(traffic.diagnose, domain)
+    return JSONResponse(result)
+
+
 @app.get("/health")
 async def health():
     return {"ok": True}

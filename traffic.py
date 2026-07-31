@@ -144,6 +144,102 @@ def _deep_find(obj, key_matches, value_test):
     return None
 
 
+# Key predicates + extractor shared by the live adapter and the diagnostics.
+_VISIT_KEYS = [
+    lambda k: ("visit" in k and ("month" in k or "total" in k or "estimat" in k)),
+    lambda k: k in ("visits", "traffic", "monthlyvisits", "estimatedvisits"),
+]
+_PAID_KEYS = [lambda k: "paid" in k and ("search" in k or "share" in k or "source" in k or k == "paid")]
+_CPC_KEYS = [lambda k: "cpc" in k]
+
+
+def _extract_traffic(item):
+    """Return (visits, paid_share_raw, cpc) best-effort from an actor item."""
+    visits = _deep_find(item, _VISIT_KEYS, lambda n: n >= 100)
+    paid = _deep_find(item, _PAID_KEYS, lambda n: 0 < n <= 100)
+    cpc = _deep_find(item, _CPC_KEYS, lambda n: n > 0)
+    return visits, paid, cpc
+
+
+def _apify_payload(domain: str) -> dict:
+    return {
+        "domains": [domain], "websites": [domain], "website": domain,
+        "queries": [domain], "startUrls": [{"url": f"https://{domain}"}],
+        "maxItems": 1, "maxResults": 1,
+    }
+
+
+def diagnose(domain: str) -> dict:
+    """
+    Human-readable check of the configured traffic provider. Powers the
+    /api/traffic-debug endpoint so you can confirm the API is wired correctly
+    without redeploying. Never returns secrets (token shown only as a prefix).
+    """
+    provider = os.environ.get("TRAFFIC_PROVIDER", "").strip().lower()
+    info = {"provider": provider or "(unset)", "domain": domain}
+    if not provider or provider == "none":
+        info["status"] = "No provider configured. Set TRAFFIC_PROVIDER (e.g. apify)."
+        return info
+    if provider == "apify":
+        return _apify_diagnose(domain, info)
+    # Other providers: run and report.
+    try:
+        r = estimate(domain)
+        info["result"] = r
+        info["status"] = "ok" if r else "Provider returned no data (check key / subscription)."
+    except Exception as e:
+        info["status"] = "error"
+        info["error"] = str(e)
+    return info
+
+
+def _apify_diagnose(domain: str, info: dict) -> dict:
+    token = os.environ.get("APIFY_TOKEN")
+    actor = os.environ.get("APIFY_ACTOR_ID", "pro100chok~similarweb-scraper")
+    info["actor"] = actor
+    info["token_present"] = bool(token)
+    if token:
+        info["token_prefix"] = token[:9] + "…"
+    if not token:
+        info["status"] = "APIFY_TOKEN is not set on the server."
+        return info
+    if httpx is None:
+        info["status"] = "httpx is not installed."
+        return info
+    url = f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items"
+    try:
+        with httpx.Client(timeout=120) as c:
+            r = c.post(url, params={"token": token}, json=_apify_payload(domain))
+        info["http_status"] = r.status_code
+        if r.status_code >= 300:
+            info["status"] = f"Apify returned HTTP {r.status_code}."
+            info["response_snippet"] = r.text[:400]
+            if r.status_code == 401:
+                info["hint"] = "Token rejected — check APIFY_TOKEN."
+            elif r.status_code == 404:
+                info["hint"] = "Actor not found — check APIFY_ACTOR_ID (username~actor-name)."
+            return info
+        items = r.json()
+        info["items_returned"] = len(items) if isinstance(items, list) else 1
+        item = items[0] if isinstance(items, list) and items else (items or None)
+        if not item:
+            info["status"] = "Actor ran but returned 0 items (domain may be unranked)."
+            return info
+        info["item_top_keys"] = list(item.keys())[:40] if isinstance(item, dict) else str(type(item))
+        visits, paid, cpc = _extract_traffic(item)
+        info["parsed"] = {"visits": visits, "paid_share_raw": paid, "cpc": cpc}
+        if visits:
+            info["status"] = "OK — traffic parsed. The report should now show estimates."
+        else:
+            info["status"] = ("Connected, but couldn't locate a visits field in the response. "
+                              "Look at item_top_keys and either switch APIFY_ACTOR_ID to a "
+                              "traffic actor, or send me these keys and I'll map them.")
+    except Exception as e:
+        info["status"] = "Request to Apify failed."
+        info["error"] = str(e)
+    return info
+
+
 def _apify(domain: str) -> dict | None:
     """
     Run an Apify traffic actor and extract monthly visits, paid share and CPC.
@@ -185,33 +281,18 @@ def _apify(domain: str) -> dict | None:
         return None
     item = items[0] if isinstance(items, list) else items
 
-    # Monthly visits: prefer keys mentioning both visit and month/total, else any 'visit'.
-    visits = _deep_find(
-        item,
-        [lambda k: ("visit" in k and ("month" in k or "total" in k or "estimat" in k)),
-         lambda k: k in ("visits", "traffic", "monthlyvisits", "estimatedvisits")],
-        lambda n: n >= 100,  # ignore tiny/percentage-like values
-    )
+    visits, paid, cpc = _extract_traffic(item)
     if not visits:
         return None
     visits = int(visits)
 
-    # Paid share: a key mentioning 'paid' with a 0..1 (or 0..100) value.
-    paid = _deep_find(
-        item,
-        [lambda k: "paid" in k and ("search" in k or "share" in k or "source" in k or k == "paid")],
-        lambda n: 0 < n <= 100,
-    )
     if paid is None:
         paid_share = _env_float("PAID_SHARE", 0.12)
     else:
         paid_share = paid / 100 if paid > 1 else paid
     paid_share = min(0.9, max(0.0, paid_share))
 
-    # CPC: a key mentioning 'cpc'.
-    cpc = _deep_find(item, [lambda k: "cpc" in k], lambda n: n > 0)
     avg_cpc = cpc if cpc else _env_float("AVG_CPC", 1.20)
-
     spend = round(visits * paid_share * avg_cpc, 2)
     return {
         "monthly_visits": visits,
