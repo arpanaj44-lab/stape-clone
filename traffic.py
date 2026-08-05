@@ -57,6 +57,8 @@ def estimate(domain: str) -> dict | None:
         return _mock(domain)
     if provider in ("similarweb_free", "similarweb-free", "swfree"):
         return _similarweb_free(domain)
+    if provider == "semrush":
+        return _semrush(domain)
     if provider == "apify":
         return _apify(domain)
     if provider == "similarweb":
@@ -107,6 +109,10 @@ def _similarweb_free(domain: str, _return_raw: bool = False):
         return (None, dbg) if _return_raw else None
     visits = int(visits)
     paid_share = paid if paid is not None else _env_float("PAID_SHARE", 0.12)
+    # Optional floor: sites with ~0 reported paid traffic (small/no-ads sites) would
+    # otherwise show $0 ad spend. MIN_PAID_SHARE (default 0 = honest) lets you model a
+    # "what-if you advertised" share instead. Set e.g. 0.08 to assume >=8% paid.
+    paid_share = max(paid_share, _env_float("MIN_PAID_SHARE", 0.0))
     paid_share = min(0.9, max(0.0, paid_share))
     avg_cpc = cpc if cpc else _env_float("AVG_CPC", 1.20)
     result = {
@@ -118,6 +124,85 @@ def _similarweb_free(domain: str, _return_raw: bool = False):
         "estimated": True,
     }
     return (result, dbg) if _return_raw else result
+
+
+def _semrush(domain: str, _return_raw: bool = False):
+    """
+    Semrush Analytics API — Domain Overview / domain_ranks.
+
+    v4 keys (starting with 'semrtkn_') and legacy v3 keys are both supported:
+    if the key starts with 'semrtkn_' we call the v4 endpoint with an
+    'Authorization: Apikey ...' header; otherwise we fall back to the v3
+    endpoint which passes the key as a query parameter. Both return the same
+    ;-separated CSV with organic + paid SEARCH traffic and Adwords Cost (Ac),
+    which we treat as monthly ad spend directly (no CPC guess needed).
+
+    Note: this is SEARCH traffic (organic + paid), NOT total cross-channel
+    visits like Similarweb — so 'monthly_visits' here is search-only.
+
+    Env:
+        SEMRUSH_API_KEY  (required)
+        SEMRUSH_DB       (optional, default 'us') — Semrush database/country.
+    """
+    key = os.environ.get("SEMRUSH_API_KEY")
+    if not key or httpx is None:
+        return (None, {"error": "no key / httpx"}) if _return_raw else None
+    db = os.environ.get("SEMRUSH_DB", "us")
+    export_columns = "Dn,Rk,Or,Ot,Oc,Ad,At,Ac"
+
+    is_v4 = key.startswith("semrtkn_")
+    if is_v4:
+        # v4: dedicated base URL for the standard API, key sent as header.
+        url = "https://api.semrush.com/analytics/v1/"
+        headers = {"Authorization": f"Apikey {key}"}
+        params = {"type": "domain_ranks", "domain": domain, "database": db,
+                  "export_columns": export_columns}
+    else:
+        url = "https://api.semrush.com/"
+        headers = {}
+        params = {"type": "domain_ranks", "key": key, "domain": domain,
+                  "database": db, "export_columns": export_columns}
+
+    dbg: dict = {"api_version": "v4" if is_v4 else "v3"}
+    try:
+        with httpx.Client(timeout=30, headers=headers) as c:
+            r = c.get(url, params=params)
+        dbg["http_status"] = r.status_code
+        text = (r.text or "").strip()
+        dbg["snippet"] = text[:300]
+        if r.status_code >= 300 or text.upper().startswith("ERROR"):
+            return (None, dbg) if _return_raw else None
+        lines = text.splitlines()
+        if len(lines) < 2:
+            return (None, dbg) if _return_raw else None
+        cols = lines[1].split(";")
+        if len(cols) < 8:
+            return (None, dbg) if _return_raw else None
+        ot = _coerce_number(cols[3]) or 0
+        at = _coerce_number(cols[6]) or 0
+        ac = _coerce_number(cols[7])
+        visits = int(ot + at)
+        if visits <= 0:
+            dbg["parsed"] = {"organic_traffic": ot, "paid_traffic": at, "adwords_cost": ac}
+            return (None, dbg) if _return_raw else None
+        paid_share = (at / (ot + at)) if (ot + at) > 0 else _env_float("PAID_SHARE", 0.12)
+        paid_share = max(paid_share, _env_float("MIN_PAID_SHARE", 0.0))
+        paid_share = min(0.9, max(0.0, paid_share))
+        avg_cpc = _env_float("AVG_CPC", 1.20)
+        spend = ac if (ac is not None and ac > 0) else round(visits * paid_share * avg_cpc, 2)
+        dbg["parsed"] = {"organic_traffic": ot, "paid_traffic": at, "adwords_cost": ac}
+        result = {
+            "monthly_visits": visits,
+            "paid_share": round(paid_share, 3),
+            "monthly_ad_spend": round(spend, 2),
+            "avg_cpc": round(avg_cpc, 2),
+            "source": f"Semrush ({db}, search traffic + Adwords cost)",
+            "estimated": True,
+        }
+        return (result, dbg) if _return_raw else result
+    except Exception as e:
+        dbg["error"] = str(e)
+        return (None, dbg) if _return_raw else None
 
 
 # ---------------------------------------------------------------------------
@@ -327,6 +412,18 @@ def diagnose(domain: str) -> dict:
         else:
             info["status"] = "Reached the endpoint but couldn't parse traffic — see item_top_keys."
         return info
+    if provider == "semrush":
+        info["build"] = "traffic-v8-semrush-v4"
+        res, dbg = _semrush(domain, _return_raw=True)
+        info.update(dbg)
+        info["result"] = res
+        if res:
+            info["status"] = "OK — Semrush data parsed. The report will show estimates."
+        else:
+            info["status"] = ("No usable data. Check http_status/snippet above. Common Semrush errors: "
+                              "'ERROR 120' = wrong API key; 'ERROR 134/135' = API not available on your "
+                              "plan or no units; empty = domain not in the chosen database (try SEMRUSH_DB).")
+        return info
     # Other providers: run and report.
     try:
         r = estimate(domain)
@@ -441,6 +538,10 @@ def _apify(domain: str) -> dict | None:
     visits = int(visits)
 
     paid_share = paid if paid is not None else _env_float("PAID_SHARE", 0.12)
+    # Optional floor: sites with ~0 reported paid traffic (small/no-ads sites) would
+    # otherwise show $0 ad spend. MIN_PAID_SHARE (default 0 = honest) lets you model a
+    # "what-if you advertised" share instead. Set e.g. 0.08 to assume >=8% paid.
+    paid_share = max(paid_share, _env_float("MIN_PAID_SHARE", 0.0))
     paid_share = min(0.9, max(0.0, paid_share))
 
     avg_cpc = cpc if cpc else _env_float("AVG_CPC", 1.20)
