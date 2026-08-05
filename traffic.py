@@ -144,13 +144,21 @@ def _semrush(domain: str, _return_raw: bool = False):
         SEMRUSH_API_KEY  (required)
         SEMRUSH_DB       (optional, default 'us') — Semrush database/country.
     """
-    key = os.environ.get("SEMRUSH_API_KEY")
+    key = (os.environ.get("SEMRUSH_API_KEY") or "").strip()
     if not key or httpx is None:
         return (None, {"error": "no key / httpx"}) if _return_raw else None
     db = os.environ.get("SEMRUSH_DB", "us")
     export_columns = "Dn,Rk,Or,Ot,Oc,Ad,At,Ac"
 
-    is_v4 = key.startswith("semrtkn_")
+    # v4 keys start with the token prefix (some UIs write it slightly differently);
+    # accept any 'semrtkn' prefix, and honour an explicit override via SEMRUSH_API_VERSION.
+    v_env = (os.environ.get("SEMRUSH_API_VERSION") or "").strip().lower()
+    if v_env in ("v3", "3"):
+        is_v4 = False
+    elif v_env in ("v4", "4"):
+        is_v4 = True
+    else:
+        is_v4 = key.lower().startswith("semrtkn")
     if is_v4:
         # v4: dedicated base URL for the standard API, key sent as header.
         url = "https://api.semrush.com/analytics/v1/"
@@ -163,7 +171,11 @@ def _semrush(domain: str, _return_raw: bool = False):
         params = {"type": "domain_ranks", "key": key, "domain": domain,
                   "database": db, "export_columns": export_columns}
 
-    dbg: dict = {"api_version": "v4" if is_v4 else "v3"}
+    dbg: dict = {
+        "api_version": "v4" if is_v4 else "v3",
+        "key_prefix": key[:10] + "...",   # first 10 chars only — no secret leaked
+        "key_length": len(key),
+    }
     try:
         with httpx.Client(timeout=30, headers=headers) as c:
             r = c.get(url, params=params)
@@ -413,7 +425,7 @@ def diagnose(domain: str) -> dict:
             info["status"] = "Reached the endpoint but couldn't parse traffic — see item_top_keys."
         return info
     if provider == "semrush":
-        info["build"] = "traffic-v8-semrush-v4"
+        info["build"] = "traffic-v9-semrush-detect"
         res, dbg = _semrush(domain, _return_raw=True)
         info.update(dbg)
         info["result"] = res
