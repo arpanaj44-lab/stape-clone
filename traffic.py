@@ -57,8 +57,6 @@ def estimate(domain: str) -> dict | None:
         return _mock(domain)
     if provider in ("similarweb_free", "similarweb-free", "swfree"):
         return _similarweb_free(domain)
-    if provider == "semrush":
-        return _semrush(domain)
     if provider == "apify":
         return _apify(domain)
     if provider == "similarweb":
@@ -425,6 +423,14 @@ def diagnose(domain: str) -> dict:
             info["status"] = "Reached the endpoint but couldn't parse traffic — see item_top_keys."
         return info
     if provider == "semrush":
+        info["build"] = "traffic-v10-semrush-moved"
+        info["status"] = ("Semrush no longer lives on TRAFFIC_PROVIDER — v4 doesn't expose "
+                          "domain traffic/ad-spend. Set SEMRUSH_API_KEY alone (and put "
+                          "TRAFFIC_PROVIDER back to 'apify' or unset). Semrush now powers "
+                          "the new 'Site authority' section via /api/authority-debug.")
+        return info
+    # Legacy Semrush path kept below only for backwards compat; do not use.
+    if provider == "__semrush_v3_disabled__":
         info["build"] = "traffic-v9-semrush-detect"
         res, dbg = _semrush(domain, _return_raw=True)
         info.update(dbg)

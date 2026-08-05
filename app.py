@@ -127,6 +127,15 @@ async def traffic_debug(domain: str = "hubspot.com"):
     return JSONResponse(result)
 
 
+@app.get("/api/authority-debug")
+async def authority_debug(domain: str = "hubspot.com"):
+    """Check whether the Semrush v4 key + Backlinks Overview endpoint is working.
+    Visit /api/authority-debug?domain=yoursite.com — the key is never returned."""
+    import semrush
+    result = await asyncio.to_thread(semrush.diagnose, domain)
+    return JSONResponse(result)
+
+
 @app.get("/health")
 async def health():
     return {"ok": True}

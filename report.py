@@ -12,6 +12,7 @@ import scoring
 import recommendations
 import traffic as traffic_provider
 import estimates
+import semrush as semrush_provider
 
 
 def generate(url: str) -> dict:
@@ -22,9 +23,17 @@ def generate(url: str) -> dict:
     scores = scoring.score_all(findings)
     recs = recommendations.build(findings, scores)
 
-    # Traffic + impact estimates (only when a provider is configured).
+    # Traffic + impact estimates (only when a traffic provider is configured).
     traffic = traffic_provider.estimate(findings["site_domain"])
     impact = estimates.compute(findings, traffic)
+
+    # Semrush v4 site authority (only when SEMRUSH_API_KEY is set). Independent
+    # of traffic; failure is silent (report just omits the section).
+    authority = None
+    try:
+        authority = semrush_provider.fetch_authority(findings["site_domain"])
+    except Exception:
+        authority = None
 
     return {
         "error": None,
@@ -37,6 +46,7 @@ def generate(url: str) -> dict:
         "cookies": findings["cookies"],
         "speed": findings["speed"],
         "impact": impact,
+        "authority": authority,
         "recommendations": recs,
     }
 

@@ -87,6 +87,49 @@
   {% else %}<p class="muted">No analytics or advertising trackers detected on this page.</p>{% endif %}
 </div>
 
+{% if r.authority %}
+{% set a = r.authority %}
+{% set as_color = ('#22c55e' if (a.authority_score or 0) >= 60 else ('#f59e0b' if (a.authority_score or 0) >= 30 else '#ef4444')) %}
+<div class="card">
+  <h2>🏛️ Site authority (Semrush)</h2>
+  <div style="display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:center">
+    <div style="text-align:center;background:#0d1327;border:1px solid var(--line);border-radius:12px;padding:14px 18px;min-width:120px">
+      <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px">Authority Score</div>
+      <div style="font-size:38px;font-weight:800;color:{{ as_color }};line-height:1">{{ a.authority_score if a.authority_score is not none else '—' }}</div>
+      <div class="muted" style="font-size:11px">/ 100</div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+      <div style="background:#0d1327;border:1px solid var(--line);border-radius:10px;padding:12px">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px">Backlinks</div>
+        <div style="font-size:20px;font-weight:700">{{ '{:,}'.format(a.backlinks_count) }}</div>
+      </div>
+      <div style="background:#0d1327;border:1px solid var(--line);border-radius:10px;padding:12px">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px">Referring domains</div>
+        <div style="font-size:20px;font-weight:700">{{ '{:,}'.format(a.domains_count) }}</div>
+      </div>
+      <div style="background:#0d1327;border:1px solid var(--line);border-radius:10px;padding:12px">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px">Dofollow</div>
+        <div style="font-size:20px;font-weight:700">{{ a.dofollow_pct }}%</div>
+      </div>
+      <div style="background:#0d1327;border:1px solid var(--line);border-radius:10px;padding:12px">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px">Net 30d</div>
+        <div style="font-size:20px;font-weight:700;color:{{ '#22c55e' if a.net_growth >= 0 else '#ef4444' }}">
+          {{ '+' if a.net_growth >= 0 else '' }}{{ '{:,}'.format(a.net_growth) }}
+        </div>
+        <div class="muted" style="font-size:11.5px;margin-top:2px">
+          +{{ '{:,}'.format(a.new_count) }} new · −{{ '{:,}'.format(a.lost_count) }} lost
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="muted" style="font-size:12.5px;margin:12px 0 0">
+    Authority Score is Semrush's 0–100 signal of a domain's overall SEO strength, based on
+    backlink quality, referring-domain diversity and organic traffic. Higher is better.
+    Source: <b>{{ a.source }}</b>.
+  </p>
+</div>
+{% endif %}
+
 <div class="card">
   <h2>💸 Tracking loss impact</h2>
   {% if r.impact %}
