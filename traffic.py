@@ -57,7 +57,14 @@ def estimate(domain: str) -> dict | None:
         return _mock(domain)
     if provider in ("similarweb_free", "similarweb-free", "swfree"):
         return _similarweb_free(domain)
+    if provider == "dataforseo":
+        # New primary provider (official, pay-as-you-go). Delegated to a
+        # dedicated module to keep this file focused on the older scraper flow.
+        import dataforseo
+        return dataforseo.estimate(domain)
     if provider == "apify":
+        # Kept intact as a free fallback. Point TRAFFIC_PROVIDER back at
+        # 'apify' any time to re-enable the vortex_data actor path.
         return _apify(domain)
     if provider == "similarweb":
         return _similarweb(domain)
@@ -408,6 +415,18 @@ def diagnose(domain: str) -> dict:
         return info
     if provider == "apify":
         return _apify_diagnose(domain, info)
+    if provider == "dataforseo":
+        info["build"] = "traffic-v11-dataforseo"
+        import dataforseo as dfs
+        d = dfs.diagnose(domain)
+        # Fold dataforseo diagnose output in without leaking the password.
+        for k in ("credentials_present", "login_prefix", "http_status", "snippet",
+                  "task_status_code", "task_status_message", "metrics_keys",
+                  "result", "status", "error", "endpoint",
+                  "location_code", "language_code"):
+            if k in d:
+                info[k] = d[k]
+        return info
     if provider in ("similarweb_free", "similarweb-free", "swfree"):
         info["build"] = "traffic-v5-swfree"
         res, dbg = _similarweb_free(domain, _return_raw=True)
