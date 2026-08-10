@@ -57,9 +57,14 @@ def estimate(domain: str) -> dict | None:
         return _mock(domain)
     if provider in ("similarweb_free", "similarweb-free", "swfree"):
         return _similarweb_free(domain)
+    if provider in ("semrush_v3", "semrush-v3"):
+        # Preferred primary now: uses your Pro-plan v3 key (SEMRUSH_V3_API_KEY)
+        # against Domain Overview. Free within your existing 50k Standard units.
+        # Real Adwords Cost (Ac), no CPC assumption.
+        return _semrush_v3(domain)
     if provider == "dataforseo":
-        # New primary provider (official, pay-as-you-go). Delegated to a
-        # dedicated module to keep this file focused on the older scraper flow.
+        # Paid pay-as-you-go alternative; kept as an option for when Semrush
+        # units run out or you want total cross-channel traffic magnitudes.
         import dataforseo
         return dataforseo.estimate(domain)
     if provider == "apify":
@@ -129,6 +134,73 @@ def _similarweb_free(domain: str, _return_raw: bool = False):
         "estimated": True,
     }
     return (result, dbg) if _return_raw else result
+
+
+def _semrush_v3(domain: str, _return_raw: bool = False):
+    """
+    Semrush v3 Domain Overview ('domain_ranks') via the legacy 32-char v3 key
+    obtained from Semrush support.
+
+    Response is `;`-separated CSV (header + 1 data row):
+        Dn ; Rk ; Or ; Ot ; Oc ; Ad ; At ; Ac
+    where Ot = organic search traffic, At = paid search traffic,
+          Ac = Adwords cost (monthly ad spend estimate in USD).
+
+    Cost: 10 API units per call from the Standard-API balance.
+
+    Env:
+        SEMRUSH_V3_API_KEY  — the auto-generated v3 key (not the semrtkn v4 one).
+        SEMRUSH_DB          — optional, default 'us' (Semrush database code).
+        AVG_CPC             — optional fallback if Ac is missing (rare).
+    """
+    key = os.environ.get("SEMRUSH_V3_API_KEY")
+    if not key or httpx is None:
+        return (None, {"error": "no v3 key / httpx"}) if _return_raw else None
+    db = os.environ.get("SEMRUSH_DB", "us")
+    params = {
+        "type": "domain_ranks", "key": key, "domain": domain,
+        "database": db, "export_columns": "Dn,Rk,Or,Ot,Oc,Ad,At,Ac",
+    }
+    dbg: dict = {"database": db}
+    try:
+        with httpx.Client(timeout=30) as c:
+            r = c.get("https://api.semrush.com/", params=params)
+        dbg["http_status"] = r.status_code
+        text = (r.text or "").strip()
+        dbg["snippet"] = text[:300]
+        if r.status_code >= 300 or text.upper().startswith("ERROR"):
+            return (None, dbg) if _return_raw else None
+        lines = text.splitlines()
+        if len(lines) < 2:
+            return (None, dbg) if _return_raw else None
+        cols = lines[1].split(";")
+        if len(cols) < 8:
+            return (None, dbg) if _return_raw else None
+        ot = _coerce_number(cols[3]) or 0.0   # organic search traffic
+        at = _coerce_number(cols[6]) or 0.0   # paid search traffic
+        ac = _coerce_number(cols[7])          # ad spend
+        visits = int(ot + at)
+        if visits <= 0 and (ac is None or ac <= 0):
+            dbg["parsed"] = {"organic_traffic": ot, "paid_traffic": at, "adwords_cost": ac}
+            return (None, dbg) if _return_raw else None
+        paid_share = (at / (ot + at)) if (ot + at) > 0 else _env_float("PAID_SHARE", 0.12)
+        paid_share = max(paid_share, _env_float("MIN_PAID_SHARE", 0.0))
+        paid_share = min(0.9, max(0.0, paid_share))
+        avg_cpc = _env_float("AVG_CPC", 1.20)
+        spend = ac if (ac is not None and ac > 0) else round(visits * paid_share * avg_cpc, 2)
+        dbg["parsed"] = {"organic_traffic": ot, "paid_traffic": at, "adwords_cost": ac}
+        result = {
+            "monthly_visits": visits,
+            "paid_share": round(paid_share, 4),
+            "monthly_ad_spend": round(spend, 2),
+            "avg_cpc": round(avg_cpc, 2) if not ac else None,
+            "source": f"Semrush v3 ({db}, search traffic + Adwords cost)",
+            "estimated": True,
+        }
+        return (result, dbg) if _return_raw else result
+    except Exception as e:
+        dbg["error"] = str(e)
+        return (None, dbg) if _return_raw else None
 
 
 def _semrush(domain: str, _return_raw: bool = False):
@@ -415,6 +487,33 @@ def diagnose(domain: str) -> dict:
         return info
     if provider == "apify":
         return _apify_diagnose(domain, info)
+    if provider in ("semrush_v3", "semrush-v3"):
+        info["build"] = "traffic-v12-semrush-v3"
+        key = os.environ.get("SEMRUSH_V3_API_KEY")
+        info["v3_key_present"] = bool(key)
+        if key:
+            info["v3_key_prefix"] = key[:6] + "..."
+            info["v3_key_length"] = len(key)
+        if not key:
+            info["status"] = ("SEMRUSH_V3_API_KEY is not set on the server. Paste your "
+                              "v3 key (32-char, not the semrtkn one) into that env var.")
+            return info
+        res, dbg = _semrush_v3(domain, _return_raw=True)
+        info.update(dbg)
+        info["result"] = res
+        if res:
+            info["status"] = ("OK — Semrush v3 Domain Overview parsed. Report will show "
+                              "real ad-spend (Ac).")
+        else:
+            snip = (info.get("snippet") or "").upper()
+            hint = None
+            if "ERROR 120" in snip:  hint = "Bad key. Confirm the v3 key value from support."
+            elif "ERROR 134" in snip: hint = "Plan doesn't grant this API on your account."
+            elif "ERROR 135" in snip: hint = "Not enough API units left this cycle."
+            elif "ERROR 50"  in snip: hint = "Domain not in this database — try SEMRUSH_DB=uk / in / etc."
+            if hint: info["hint"] = hint
+            info["status"] = "Reached Semrush v3 but couldn't parse a data row. See snippet/hint."
+        return info
     if provider == "dataforseo":
         info["build"] = "traffic-v11-dataforseo"
         import dataforseo as dfs
