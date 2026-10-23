@@ -151,6 +151,38 @@ def build(findings: dict, scores: dict) -> dict:
             "improvement": _cap(3, headroom),
         })
 
+    # --- Consent Mode v2 --------------------------------------------------------
+    consent_mode = findings.get("consent_mode") or {}
+    if not consent_mode.get("detected"):
+        # No consent mode at all — flag it
+        has_google = any(t["platform"].startswith("Google") for t in trackers)
+        if has_google:
+            recs.append({
+                "title": "Implement Google Consent Mode v2",
+                "categories": ["Analytics", "Advertising"],
+                "detail": (
+                    "Google tags are present but Consent Mode v2 is not configured. "
+                    "Since March 2024, Google requires Consent Mode v2 for EU audience "
+                    "remarketing and personalisation. Add consent default and update "
+                    "commands so Google tags respect user consent and you retain full "
+                    "measurement and remarketing capabilities."
+                ),
+                "improvement": _cap(10, headroom),
+            })
+    elif consent_mode.get("detected") and not consent_mode.get("is_v2"):
+        # Has Consent Mode v1 but missing the v2 keys
+        recs.append({
+            "title": "Upgrade to Consent Mode v2",
+            "categories": ["Analytics", "Advertising"],
+            "detail": (
+                "Consent Mode is active but is missing the v2 signals "
+                "(ad_user_data, ad_personalization). Google now requires these for "
+                "EU remarketing lists and personalised ads. Add the two new consent "
+                "types to your consent default/update commands."
+            ),
+            "improvement": _cap(6, headroom),
+        })
+
     # --- Page speed ------------------------------------------------------------
     if scores["pagespeed"] < 80:
         load_s = round((speed.get("load_ms", 0) or 0) / 1000, 1)

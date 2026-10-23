@@ -44,6 +44,8 @@ def generate(url: str) -> dict:
         "scores": scores,
         "trackers": findings["trackers"],
         "cookies": findings["cookies"],
+        "consent_mode": findings.get("consent_mode"),
+        "consent_dismissed": findings.get("consent_dismissed", False),
         "speed": findings["speed"],
         "impact": impact,
         "authority": authority,
