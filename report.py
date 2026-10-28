@@ -15,20 +15,21 @@ import estimates
 import semrush as semrush_provider
 
 
-def generate(url: str) -> dict:
+def generate(url) -> dict:
+    """
+    `url` may be a single string or a list (for multi-page scans).
+    """
     findings = scanner.scan(url)
     if findings.get("error"):
-        return {"error": findings["error"], "url": findings.get("url", url)}
+        first_url = findings.get("url") or (url if isinstance(url, str) else (url[0] if url else ""))
+        return {"error": findings["error"], "url": first_url}
 
     scores = scoring.score_all(findings)
     recs = recommendations.build(findings, scores)
 
-    # Traffic + impact estimates (only when a traffic provider is configured).
     traffic = traffic_provider.estimate(findings["site_domain"])
     impact = estimates.compute(findings, traffic)
 
-    # Semrush v4 site authority (only when SEMRUSH_API_KEY is set). Independent
-    # of traffic; failure is silent (report just omits the section).
     authority = None
     try:
         authority = semrush_provider.fetch_authority(findings["site_domain"])
@@ -44,9 +45,15 @@ def generate(url: str) -> dict:
         "scores": scores,
         "trackers": findings["trackers"],
         "cookies": findings["cookies"],
-        "consent_mode": findings.get("consent_mode"),
-        "consent_dismissed": findings.get("consent_dismissed", False),
         "speed": findings["speed"],
+        # New (v2 scanner) fields — safe for templates to .get() with defaults.
+        "cmps": findings.get("cmps", []),
+        "consent": findings.get("consent", {}),
+        "blocked_tracking_requests": findings.get("blocked_tracking_requests", 0),
+        "urls_scanned": findings.get("urls_scanned", [findings.get("url", "")]),
+        "pages_scanned": findings.get("pages_scanned", 1),
+        "pages_total": findings.get("pages_total", 1),
+        "page_errors": findings.get("page_errors", []),
         "impact": impact,
         "authority": authority,
         "recommendations": recs,

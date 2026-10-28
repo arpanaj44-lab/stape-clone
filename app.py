@@ -72,7 +72,7 @@ def _share_ctx(request: Request, rid: str, created: float) -> dict:
     }
 
 
-async def _run_scan(url: str) -> dict:
+async def _run_scan(url) -> dict:
     return await asyncio.to_thread(report_engine.generate, url)
 
 
@@ -82,20 +82,24 @@ async def index(request: Request):
 
 
 @app.post("/scan")
-async def scan(request: Request, url: str = Form(...)):
-    url = url.strip()
+async def scan(request: Request, url: str = Form(...), extra_urls: str = Form("")):
+    """
+    Accepts a primary URL and an optional `extra_urls` field (comma-separated,
+    up to 2 additional pages — multi-page merged scan).
+    """
+    url = (url or "").strip()
     if not url:
-        return templates.TemplateResponse(
-            request, "index.html", {"error": "Please enter a URL."}
-        )
-    data = await _run_scan(url)
+        return templates.TemplateResponse(request, "index.html",
+                                          {"error": "Please enter a URL."})
+    extras = [u.strip() for u in (extra_urls or "").replace("\n", ",").split(",") if u.strip()]
+    urls = [url] + extras[:2]  # cap total at 3 pages
+    data = await _run_scan(urls if len(urls) > 1 else url)
     if data.get("error"):
         return templates.TemplateResponse(
             request,
             "index.html",
             {"error": f"Couldn't scan that URL: {data['error']}", "prefill": url},
         )
-    # Store and redirect to a shareable, bookmarkable URL.
     rid = _store(data)
     return RedirectResponse(url=f"/r/{rid}", status_code=303)
 
