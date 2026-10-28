@@ -52,14 +52,78 @@ def _find_headless_shell() -> str | None:
 
 
 def _launch(p):
-    args = ["--no-sandbox", "--disable-dev-shm-usage"]
+    # Anti-detection launch flags. --disable-blink-features=AutomationControlled
+    # is the single highest-signal fix for Cloudflare / bot-detection services;
+    # it hides the `navigator.webdriver=true` marker that Playwright sets by
+    # default. The other flags trim away minor automation hints without
+    # breaking any detections.
+    # Primary anti-detection flag: hides the navigator.webdriver=true marker.
+    # The other flags are kept minimal because chromium-headless-shell rejects
+    # several of the feature-toggle flags that the full chromium build accepts.
+    args = [
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-blink-features=AutomationControlled",
+    ]
     exe = _find_headless_shell()
     try:
-        return p.chromium.launch(args=args)
+        return p.chromium.launch(args=args, headless=True)
     except Exception:
         if exe:
-            return p.chromium.launch(args=args, executable_path=exe)
+            return p.chromium.launch(args=args, executable_path=exe, headless=True)
         raise
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Stealth init script (#1) — overrides JS-side automation markers that
+# Cloudflare/Datadome/PerimeterX etc. probe for before serving a challenge.
+# Runs in every page before any site script.
+# ──────────────────────────────────────────────────────────────────────────────
+STEALTH_INIT_JS = """
+// Hide navigator.webdriver (biggest tell). Wrapped in try/catch so a page
+// that redefines the property can't throw.
+try { Object.defineProperty(navigator, 'webdriver', { get: () => undefined }); } catch (e) {}
+
+// Fake navigator.languages.
+try { Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] }); } catch (e) {}
+
+// Make navigator.hardwareConcurrency look like a real machine.
+try { Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 }); } catch (e) {}
+
+// Fake window.chrome runtime.
+if (!window.chrome) window.chrome = {};
+window.chrome.runtime = window.chrome.runtime || { connect: () => undefined, sendMessage: () => undefined };
+window.chrome.loadTimes = window.chrome.loadTimes || function () { return {}; };
+window.chrome.csi = window.chrome.csi || function () { return {}; };
+
+// Patch Notification permissions query (another common check).
+if (navigator.permissions && navigator.permissions.query) {
+  const origQ = navigator.permissions.query.bind(navigator.permissions);
+  navigator.permissions.query = (p) =>
+    p && p.name === 'notifications'
+      ? Promise.resolve({ state: Notification.permission })
+      : origQ(p);
+}
+
+// Spoof WebGL vendor/renderer (Playwright's SwiftShader is a dead giveaway).
+try {
+  const gl = WebGLRenderingContext && WebGLRenderingContext.prototype;
+  if (gl) {
+    const orig = gl.getParameter;
+    gl.getParameter = function (param) {
+      if (param === 37445) return 'Intel Inc.';
+      if (param === 37446) return 'Intel Iris OpenGL Engine';
+      return orig.call(this, param);
+    };
+  }
+} catch (e) {}
+
+// Fake navigator.deviceMemory.
+try { Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 }); } catch (e) {}
+
+// Hide the `__playwright__` and headless markers.
+try { delete window.__playwright__; } catch (e) {}
+"""
 
 
 def _registrable_domain(host: str) -> str:
@@ -204,16 +268,80 @@ def scan(url, timeout_ms: int = 35000) -> dict:
 
 
 def _new_context(browser):
-    return browser.new_context(
+    """
+    Context tuned to look like a real Chrome on Windows. Intentionally sparse
+    on extra headers — we let Chrome generate its own Sec-CH-UA/Sec-Fetch
+    headers (overriding them with hand-crafted values risks header mismatches
+    that bot-detectors flag). The stealth init script does the JS-side work.
+    """
+    ctx = browser.new_context(
         user_agent=(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+            "(KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
         ),
         viewport={"width": 1366, "height": 900},
         locale="en-US",
+        timezone_id="America/New_York",
+        ignore_https_errors=True,
         extra_http_headers={"Accept-Language": "en-US,en;q=0.9"},
-        ignore_https_errors=True,  # try to scan even sites with expired/misconfigured certs
     )
+    try:
+        ctx.add_init_script(STEALTH_INIT_JS)
+    except Exception:
+        pass
+    return ctx
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Cloudflare / bot-challenge detection (#3 + #6)
+# ──────────────────────────────────────────────────────────────────────────────
+CF_URL_MARKERS = ("__cf_chl_rt_tk=", "__cf_chl_tk=", "__cf_chl_jschl_tk=",
+                  "cdn-cgi/challenge-platform", "/cdn-cgi/l/chk_jschl")
+CF_TITLE_MARKERS = ("just a moment", "attention required", "please wait",
+                    "checking your browser", "security check")
+CF_BODY_MARKERS = ("cf-challenge", "challenge-platform", "_cf_chl_opt",
+                   "cf-browser-verification", "cf-mitigated", "cf_captcha_kind")
+
+
+def _detect_cf_challenge(page, current_url: str) -> bool:
+    """True if the current page looks like a Cloudflare (or similar) challenge."""
+    url_low = (current_url or "").lower()
+    if any(m in url_low for m in CF_URL_MARKERS):
+        return True
+    try:
+        title = (page.title() or "").lower()
+        if any(m in title for m in CF_TITLE_MARKERS):
+            return True
+    except Exception:
+        pass
+    try:
+        html = (page.content() or "")[:4000].lower()
+        if any(m in html for m in CF_BODY_MARKERS):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _wait_for_challenge_pass(page, max_seconds: int = 15) -> bool:
+    """
+    Many Cloudflare challenges auto-pass after a few seconds of JavaScript
+    execution ('Just a moment…'). Poll up to `max_seconds` for the real page.
+    Returns True once the challenge markers go away.
+    """
+    import time as _t
+    deadline = _t.time() + max_seconds
+    while _t.time() < deadline:
+        try:
+            if not _detect_cf_challenge(page, page.url):
+                return True
+        except Exception:
+            pass
+        try:
+            page.wait_for_timeout(1200)
+        except Exception:
+            break
+    return False
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -237,11 +365,22 @@ def _scan_one(context, url, site_domain, timeout_ms) -> dict:
     raw_cookies: list[dict] = []
     consent = {"attempted": False, "clicked": False}
     cmps_seen: list[str] = []
+    cf_challenge = {"detected": False, "passed": False}
 
     try:
         resp = page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
         final_url = page.url
         status_code = resp.status if resp else None
+
+        # Cloudflare / bot-challenge handling (#3 + #6). If we landed on a
+        # challenge page, give it up to 15 s to self-resolve (the JS challenge
+        # usually passes once Playwright's main thread has run for a few
+        # seconds). If it does, we scan the real page as normal; if not, we
+        # flag the result so the UI can say so honestly.
+        if _detect_cf_challenge(page, final_url):
+            cf_challenge["detected"] = True
+            cf_challenge["passed"] = _wait_for_challenge_pass(page, max_seconds=15)
+            final_url = page.url  # URL may have changed after the challenge
 
         # Snapshot CMPs seen so far from script hosts, then try to accept.
         cmps_seen = _detect_cmps(requests_seen)
@@ -307,6 +446,7 @@ def _scan_one(context, url, site_domain, timeout_ms) -> dict:
         "speed": speed,
         "cmps": cmp_rows,
         "consent": consent,
+        "cloudflare_challenge": cf_challenge,
         "blocked_tracking_requests": blocked_tracking,
         "request_count": len(requests_seen),
         "error": None,
@@ -363,6 +503,12 @@ def _merge_pages(page_results: list[dict], urls: list[str], site_domain: str) ->
     blocked = sum(r.get("blocked_tracking_requests", 0) for r in successes)
     consent_summary = next((r.get("consent") for r in successes if r.get("consent", {}).get("clicked")), successes[0].get("consent") if successes else {})
 
+    # Cloudflare across all pages: detected = any page saw it; passed = all
+    # pages that saw it successfully resolved.
+    cf_detected = any((r.get("cloudflare_challenge") or {}).get("detected") for r in successes)
+    cf_passed = all((r.get("cloudflare_challenge") or {}).get("passed", True)
+                    for r in successes if (r.get("cloudflare_challenge") or {}).get("detected"))
+
     primary = successes[0] if successes else page_results[0]
     return {
         "url": urls[0],
@@ -378,6 +524,7 @@ def _merge_pages(page_results: list[dict], urls: list[str], site_domain: str) ->
         "cookies": cookies,
         "cmps": list(cmp_map.values()),
         "consent": consent_summary,
+        "cloudflare_challenge": {"detected": cf_detected, "passed": cf_passed},
         "blocked_tracking_requests": blocked,
         "speed": speed,
         "request_count": sum(r.get("request_count", 0) for r in successes),

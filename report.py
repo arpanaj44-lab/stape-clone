@@ -49,6 +49,7 @@ def generate(url) -> dict:
         # New (v2 scanner) fields — safe for templates to .get() with defaults.
         "cmps": findings.get("cmps", []),
         "consent": findings.get("consent", {}),
+        "cloudflare_challenge": findings.get("cloudflare_challenge", {}),
         "blocked_tracking_requests": findings.get("blocked_tracking_requests", 0),
         "urls_scanned": findings.get("urls_scanned", [findings.get("url", "")]),
         "pages_scanned": findings.get("pages_scanned", 1),
